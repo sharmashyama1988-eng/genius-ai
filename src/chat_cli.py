@@ -91,7 +91,12 @@ class GeniusChatSession:
 
     async def _handle_slash_command(self, user_input: str) -> Optional[str]:
         """Handles terminal slash commands."""
-        parts = user_input.split(maxsplit=1)
+        clean_input = user_input.strip()
+        # Handle cases like "/ off" -> "/off"
+        if clean_input.startswith("/") and len(clean_input) > 1 and clean_input[1] == " ":
+            clean_input = "/" + clean_input[1:].lstrip()
+
+        parts = clean_input.split(maxsplit=1)
         cmd = parts[0].lower()
         arg = parts[1].strip() if len(parts) > 1 else ""
 
@@ -110,6 +115,18 @@ class GeniusChatSession:
             status_str = "VISIBLE" if self.show_thinking else "HIDDEN"
             self.console.print(f"[dim]xThinking stream display is now: [bold]{status_str}[/bold][/dim]")
 
+        elif cmd in ("/off", "/offline", "/disable"):
+            self.engine.set_research_mode("off")
+            self.console.print("[bold yellow]⚡ Research mode set to: [bold red]OFF[/bold red] (Fast direct / offline mode)[/bold yellow]")
+
+        elif cmd in ("/on", "/online", "/enable"):
+            self.engine.set_research_mode("on")
+            self.console.print("[bold cyan]🔍 Research mode set to: [bold green]ON[/bold green] (Always parallel Wikipedia + Web search)[/bold cyan]")
+
+        elif cmd == "/auto":
+            self.engine.set_research_mode("auto")
+            self.console.print("[bold green]🧠 Research mode set to: [bold cyan]AUTO[/bold cyan] (Intelligent routing based on query complexity)[/bold green]")
+
         elif cmd in ("/research", "/mode"):
             if not arg:
                 curr = self.engine.research_mode.upper()
@@ -117,7 +134,7 @@ class GeniusChatSession:
                 self.console.print("  • [yellow]auto[/yellow]   - Intelligent routing (short-circuits simple queries, searches for factual questions)")
                 self.console.print("  • [yellow]on[/yellow]     - Always perform parallel Wikipedia + Web search for every turn")
                 self.console.print("  • [yellow]off[/yellow]    - Fast direct / offline mode (bypasses all web/wiki requests, runs directly from model)")
-                self.console.print("[dim]Usage: /research [auto|on|off][/dim]")
+                self.console.print("[dim]Usage: /research [auto|on|off]  (or directly: /on, /off, /auto)[/dim]")
             else:
                 if self.engine.set_research_mode(arg):
                     new_mode = self.engine.research_mode.upper()
@@ -242,6 +259,9 @@ class GeniusChatSession:
             table.add_row("/clear", "Clear screen and reset working memory")
             table.add_row("/exit", "Exit chat")
             self.console.print(table)
+
+        else:
+            self.console.print(f"[yellow]Unknown command '{cmd}'. Type [bold]/help[/bold] to view available commands.[/yellow]")
 
         return None
 
