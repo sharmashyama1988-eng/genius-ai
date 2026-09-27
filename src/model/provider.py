@@ -329,8 +329,10 @@ class FoundationalEdgeProvider(BaseLLMProvider):
             yield tok
             await asyncio.sleep(0.01)
 
-        # Stream response words with realistic typing speed
-        words = response_text.split(" ")
+        # Stream response words with realistic typing speed (sanitized for clean plain text display)
+        from ..reasoning.text_sanitizer import TextSanitizer
+        clean_response = TextSanitizer.clean_for_display(response_text)
+        words = clean_response.split(" ")
         for i, word in enumerate(words):
             yield (word + " " if i < len(words) - 1 else word)
             await asyncio.sleep(0.015)

@@ -21,9 +21,11 @@ from rich.text import Text
 from .languages.router import DetectedLanguage
 from .model.provider import UniversalModelRouter
 from .reasoning.schema import GroundingVerdict
+from .reasoning.text_sanitizer import TextSanitizer
 from .reasoning.xthinking import Citation, ReasoningEvent, XThinkingEngine
 from .system.executor import ExecutionResult, SystemExecutor
 from .system.guard import ActionSafetyLevel, SafetyGuard
+from .system.workspace import WorkspaceManager
 
 
 class GeniusChatSession:
@@ -33,7 +35,8 @@ class GeniusChatSession:
         self.console = Console()
         self.show_thinking = show_thinking
         self.engine = XThinkingEngine()
-        self.executor = SystemExecutor()
+        self.workspace = WorkspaceManager()
+        self.executor = SystemExecutor(default_cwd=str(self.workspace.get_workspace()))
         self.session_id = self.engine.session_mgr.create_session("Interactive Session")
         self.history: List[Dict[str, str]] = []
         self.forced_lang: Optional[str] = None
@@ -46,6 +49,8 @@ class GeniusChatSession:
         banner.append("⚡ GENIUS : AUTONOMOUS DEEP RESEARCHER & REASONING AI\n", style="bold cyan")
         banner.append("• Model Core: ", style="bold white")
         banner.append(f"{active_model.upper()} (Qwen2.5-0.5B-Instruct edge default)\n", style="green")
+        banner.append("• Active Project: ", style="bold white")
+        banner.append(f"{self.workspace.get_workspace()}\n", style="bold green")
         banner.append("• Research Mode: ", style="bold white")
         banner.append(f"{self.engine.research_mode.upper()} (auto / on / off toggleable)\n", style="cyan")
         banner.append("• Neural Schema: ", style="bold white")
@@ -57,7 +62,7 @@ class GeniusChatSession:
         banner.append("• Safety Guard: ", style="bold white")
         banner.append("Human-in-the-Loop (HITL) Static AST/Regex Command Guardian\n", style="red")
         banner.append("• Commands: ", style="bold white")
-        banner.append("/research, /model, /calc, /code, /search, /exec, /stats, /export, /sessions, /think, /lang, /clear, /exit\n", style="dim")
+        banner.append("/project, /files, /read, /create, /view, /calc, /code, /search, /exec, /stats, /clear, /exit\n", style="dim")
 
         self.console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
