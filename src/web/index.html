@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genius: Autonomous Deep-Reasoning AI (xThinking + Wikipedia)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0b0b0d;
+      --bg-card: rgba(18, 18, 23, 0.75);
+      --bg-card-hover: rgba(24, 24, 32, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-active: rgba(0, 240, 255, 0.35);
+      --accent-cyan: #00f0ff;
+      --accent-amber: #ffb800;
+      --accent-emerald: #10b981;
+      --text-primary: #f5f5f7;
+      --text-secondary: #9494a3;
+      --text-muted: #5e5e6e;
+      --glow-cyan: 0 0 25px rgba(0, 240, 255, 0.2);
+      --glow-amber: 0 0 25px rgba(255, 184, 0, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(255, 184, 0, 0.03) 0%, transparent 40%);
+      color: var(--text-primary);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      padding: 1.5rem 3rem;
+      border-bottom: 1px solid var(--border-subtle);
+      backdrop-filter: blur(16px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent-cyan), #4f46e5);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #0b0b0d;
+      font-size: 1.2rem;
+      box-shadow: var(--glow-cyan);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      padding: 0.35rem 0.9rem;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+    }
+
+    main {
+      flex: 1;
+      max-width: 1000px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .hero-section {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .hero-title {
+      font-size: 2.2rem;
+      font-weight: 700;
+      line-height: 1.2;
+      background: linear-gradient(180deg, #ffffff 30%, #9494a3 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-description {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .search-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      transition: all 0.25s ease;
+    }
+
+    .search-card:focus-within {
+      border-color: var(--border-active);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), var(--glow-cyan);
+    }
+
+    .input-wrapper {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    textarea#questionInput {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 1.05rem;
+      resize: none;
+      min-height: 56px;
+      line-height: 1.5;
+    }
+
+    textarea#questionInput::placeholder {
+      color: var(--text-muted);
+    }
+
+    .action-btn {
+      background: linear-gradient(135deg, var(--accent-cyan), #00a8ff);
+      color: #0b0b0d;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      padding: 0.8rem 1.6rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--glow-cyan);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Process Pipeline Steps */
+    .pipeline-status {
+      display: none;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .pipeline-item {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      font-size: 0.85rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+    }
+
+    .pipeline-icon {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      font-size: 0.75rem;
+    }
+
+    .pipeline-item.active {
+      color: var(--accent-cyan);
+    }
+
+    .pipeline-item.active .pipeline-icon {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+
+    /* Thinking Box */
+    .thinking-container {
+      display: none;
+      background: rgba(255, 184, 0, 0.03);
+      border: 1px solid rgba(255, 184, 0, 0.2);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-top: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .thinking-header {
+      padding: 0.8rem 1.2rem;
+      background: rgba(255, 184, 0, 0.06);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .thinking-title {
+      font-size: 0.85rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--accent-amber);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .thinking-badge {
+      font-size: 0.7rem;
+      background: rgba(255, 184, 0, 0.15);
+      color: var(--accent-amber);
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+    }
+
+    .thinking-body {
+      padding: 1.2rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #d1d1db;
+      white-space: pre-wrap;
+      max-height: 380px;
+      overflow-y: auto;
+      border-top: 1px solid rgba(255, 184, 0, 0.1);
+    }
+
+    /* Grounded Response Card */
+    .response-card {
+      display: none;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 2rem;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      animation: fadeIn 0.4s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .response-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .response-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .markdown-content {
+      line-height: 1.8;
+      font-size: 0.98rem;
+      color: #e4e4e9;
+    }
+
+    .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: #ffffff;
+    }
+
+    .markdown-content p {
+      margin-bottom: 1rem;
+    }
+
+    .markdown-content ul, .markdown-content ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .markdown-content code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 0.2rem 0.4rem;
+      border-radius: 5px;
+      font-size: 0.88em;
+    }
+
+    .markdown-content pre {
+      background: #121217;
+      padding: 1rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 1rem 0;
+      border: 1px solid var(--border-subtle);
+    }
+
+    /* Citations Area */
+    .citations-section {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .citations-title {
+      font-size: 0.85rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+    }
+
+    .citations-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .citation-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 1rem;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: block;
+      color: inherit;
+    }
+
+    .citation-card:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 240, 255, 0.03);
+      transform: translateY(-2px);
+    }
+
+    .citation-idx {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    .citation-art-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin: 0.3rem 0;
+      color: var(--text-primary);
+    }
+
+    .citation-sec {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">G</div>
+      <div>
+        <div class="brand-title">Genius</div>
+        <div class="brand-subtitle">Deep-Reasoning AI • LIMA & Wikipedia Grounded</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 0.8rem; align-items: center;">
+      <div id="languageBadge" class="badge-pill" style="color: var(--accent-cyan); border-color: rgba(0, 240, 255, 0.25);" title="Auto-Language Model Router">
+        <span>🌐 Lang: Auto-Detect</span>
+      </div>
+      <div class="badge-pill">
+        <span class="status-dot"></span>
+        <span id="deviceBadge">CUDA: Ready</span>
+      </div>
+      <div class="badge-pill" title="Datasets: LIMA, Alpaca, CodeAlpaca">
+        <span>Datasets: LIMA / Alpaca / CodeAlpaca</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero-section">
+      <h1 class="hero-title">Meet Genius: Autonomous Deep Researcher</h1>
+      <p class="hero-description">
+        Powered by Qwen2.5-0.5B, LIMA instruction alignment, CodeAlpaca programming intelligence, and live Wikipedia factual grounding.
+      </p>
+    </div>
+
+    <div class="search-card">
+      <div class="input-wrapper">
+        <textarea id="questionInput" placeholder="Ask any complex question, historical event, scientific concept, or coding problem..." rows="2"></textarea>
+        <button id="submitBtn" class="action-btn" onclick="startResearch()">
+          <span>Research & Think</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </div>
+
+      <div id="pipelineStatus" class="pipeline-status">
+        <div id="stepPlan" class="pipeline-item">
+          <div class="pipeline-icon">1</div>
+          <span id="stepPlanText">Analyzing question intent & planning search queries...</span>
+        </div>
+        <div id="stepResearch" class="pipeline-item">
+          <div class="pipeline-icon">2</div>
+          <span id="stepResearchText">Searching Wikipedia & extracting factual passages...</span>
+        </div>
+        <div id="stepThinking" class="pipeline-item">
+          <div class="pipeline-icon">3</div>
+          <span id="stepThinkingText">xThinking: Deep multi-hop reasoning & self-critique...</span>
+        </div>
+        <div id="stepResponse" class="pipeline-item">
+          <div class="pipeline-icon">4</div>
+          <span id="stepResponseText">Synthesizing cited grounded answer...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible xThinking Process -->
+    <div id="thinkingContainer" class="thinking-container">
+      <div class="thinking-header" onclick="toggleThinking()">
+        <div class="thinking-title">
+          <span>🧠 xThinking Chain-of-Thought (Extended Reasoning)</span>
+          <span id="thinkingDuration" class="thinking-badge">Active</span>
+        </div>
+        <span id="thinkingToggleIcon" style="font-size: 0.8rem; color: var(--accent-amber);">▲ Collapse</span>
+      </div>
+      <div id="thinkingBody" class="thinking-body"></div>
+    </div>
+
+    <!-- Final Grounded Response -->
+    <div id="responseCard" class="response-card">
+      <div class="response-header">
+        <div class="response-title">
+          <span>📝 Grounded Response</span>
+        </div>
+        <div id="responseTimeBadge" class="badge-pill">0.0s</div>
+      </div>
+      <div id="markdownOutput" class="markdown-content"></div>
+
+      <!-- Citations -->
+      <div id="citationsSection" class="citations-section" style="display: none;">
+        <div class="citations-title">Verified Wikipedia Sources</div>
+        <div id="citationsGrid" class="citations-grid"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let thinkingCollapsed = false;
+
+    function toggleThinking() {
+      const body = document.getElementById("thinkingBody");
+      const icon = document.getElementById("thinkingToggleIcon");
+      thinkingCollapsed = !thinkingCollapsed;
+      if (thinkingCollapsed) {
+        body.style.display = "none";
+        icon.textContent = "▼ Expand";
+      } else {
+        body.style.display = "block";
+        icon.textContent = "▲ Collapse";
+      }
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch("/api/health");
+        const data = await res.json();
+        const badge = document.getElementById("deviceBadge");
+        if (data.cuda_available) {
+          badge.textContent = "GPU: " + data.device;
+          badge.style.color = "#10b981";
+        } else {
+          badge.textContent = "CPU Mode";
+        }
+      } catch (e) {
+        console.warn("Could not check server health:", e);
+      }
+    }
+    checkHealth();
+
+    async function startResearch() {
+      const input = document.getElementById("questionInput");
+      const btn = document.getElementById("submitBtn");
+      const question = input.value.trim();
+      if (!question) return;
+
+      btn.disabled = true;
+      document.getElementById("pipelineStatus").style.display = "flex";
+      document.getElementById("stepPlan").className = "pipeline-item active";
+      document.getElementById("stepResearch").className = "pipeline-item";
+      document.getElementById("stepThinking").className = "pipeline-item";
+      document.getElementById("stepResponse").className = "pipeline-item";
+
+      const thinkingBox = document.getElementById("thinkingContainer");
+      const thinkingBody = document.getElementById("thinkingBody");
+      thinkingBox.style.display = "block";
+      thinkingBody.textContent = "";
+
+      const responseCard = document.getElementById("responseCard");
+      const markdownOut = document.getElementById("markdownOutput");
+      const citationsSection = document.getElementById("citationsSection");
+      const citationsGrid = document.getElementById("citationsGrid");
+      responseCard.style.display = "none";
+      markdownOut.innerHTML = "";
+      citationsSection.style.display = "none";
+      citationsGrid.innerHTML = "";
+
+      let fullResponseText = "";
+      let startTime = performance.now();
+
+      const url = `/api/stream?question=${encodeURIComponent(question)}`;
+      const evtSource = new EventSource(url);
+
+      evtSource.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          const stage = event.stage;
+          const type = event.event_type;
+          const payload = event.payload;
+
+          if (stage === "language") {
+            const langBadge = document.getElementById("languageBadge");
+            if (langBadge && payload && payload.name) {
+              langBadge.innerHTML = `<span>🌐 ${payload.name}</span>`;
+            }
+          } else if (stage === "plan") {
+            document.getElementById("stepPlanText").textContent = payload.message || "Planning...";
+          } else if (stage === "research") {
+            document.getElementById("stepPlan").className = "pipeline-item";
+            document.getElementById("stepResearch").className = "pipeline-item active";
+            if (payload && payload.message) {
+              document.getElementById("stepResearchText").textContent = payload.message;
+            }
+          } else if (stage === "thinking") {
+            document.getElementById("stepResearch").className = "pipeline-item";
+            document.getElementById("stepThinking").className = "pipeline-item active";
+            if (type === "token") {
+              thinkingBody.textContent += payload.token;
+              thinkingBody.scrollTop = thinkingBody.scrollHeight;
+            } else if (type === "complete") {
+              document.getElementById("thinkingDuration").textContent = "Completed";
+            }
+          } else if (stage === "response") {
+            document.getElementById("stepThinking").className = "pipeline-item";
+            document.getElementById("stepResponse").className = "pipeline-item active";
+            responseCard.style.display = "block";
+
+            if (type === "token") {
+              fullResponseText += payload.token;
+              markdownOut.innerHTML = marked.parse(fullResponseText);
+            }
+          } else if (stage === "done") {
+            document.getElementById("stepResponse").className = "pipeline-item";
+            btn.disabled = false;
+            evtSource.close();
+
+            const duration = ((performance.now() - startTime) / 1000).toFixed(1);
+            document.getElementById("responseTimeBadge").textContent = `${duration}s`;
+
+            const citations = payload.citations || [];
+            if (citations.length > 0) {
+              citationsSection.style.display = "block";
+              citationsGrid.innerHTML = "";
+              citations.forEach(c => {
+                const card = document.createElement("a");
+                card.className = "citation-card";
+                card.href = c.url;
+                card.target = "_blank";
+                card.innerHTML = `
+                  <div class="citation-idx">[${c.index}] WIKIPEDIA</div>
+                  <div class="citation-art-title">${c.title}</div>
+                  <div class="citation-sec">Section: ${c.section}</div>
+                `;
+                citationsGrid.appendChild(card);
+              });
+            }
+          } else if (stage === "error") {
+            btn.disabled = false;
+            evtSource.close();
+            alert("Error: " + (payload.error || "Unknown error"));
+          }
+        } catch (err) {
+          console.error("Parse error:", err);
+        }
+      };
+
+      evtSource.onerror = (err) => {
+        console.error("EventSource failed:", err);
+        btn.disabled = false;
+        evtSource.close();
+      };
+    }
+  </script>
+</body>
+</html>

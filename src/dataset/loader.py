@@ -1,0 +1,161 @@
+"""Dataset loader and manager for LIMA, Alpaca, and CodeAlpaca."""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Literal, Optional
+import httpx
+
+logger = logging.getLogger(__name__)
+
+DatasetSource = Literal["lima", "alpaca", "codealpaca"]
+
+RAW_DATASET_URLS: Dict[DatasetSource, str] = {
+    # Alpaca 52k clean instruction dataset
+    "alpaca": "https://raw.githubusercontent.com/tatsu-lab/stanford_alpaca/main/alpaca_data.json",
+    # CodeAlpaca 20k programming instruction dataset
+    "codealpaca": "https://raw.githubusercontent.com/sahil280114/codealpaca/master/data/code_alpaca_20k.json",
+    # LIMA - Less is More for Alignment (GAIR/lima)
+    "lima": "https://huggingface.co/datasets/GAIR/lima/resolve/main/train.jsonl",
+}
+
+
+@dataclass
+class DatasetItem:
+    """Standardized representation of an instruction/conversation sample."""
+    id: str
+    source: DatasetSource
+    category: str
+    instruction: str
+    input: str
+    output: str
+    metadata: Dict[str, Any]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+class DatasetManager:
+    """Manages downloading, caching, and loading curated datasets."""
+
+    def __init__(self, storage_dir: str | Path = "data/datasets") -> None:
+        self.storage_dir = Path(storage_dir)
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_local_path(self, source: DatasetSource) -> Path:
+        """Returns the local path for a dataset."""
+        ext = "jsonl" if source == "lima" else "json"
+        return self.storage_dir / f"{source}.{ext}"
+
+    def is_cached(self, source: DatasetSource) -> bool:
+        """Checks if dataset exists locally and is not empty."""
+        p = self.get_local_path(source)
+        return p.exists() and p.stat().st_size > 1024
+
+    async def download_dataset(
+        self,
+        source: DatasetSource,
+        force: bool = False,
+    ) -> Path:
+        """Downloads dataset from primary or mirror repository."""
+        target_path = self.get_local_path(source)
+        if target_path.exists() and not force and target_path.stat().st_size > 1024:
+            logger.info(f"Dataset '{source}' already cached at {target_path}")
+            return target_path
+
+        url = RAW_DATASET_URLS.get(source)
+        if not url:
+            raise ValueError(f"Unknown dataset source: {source}")
+
+        logger.info(f"Downloading dataset '{source}' from {url}...")
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            target_path.write_bytes(resp.content)
+
+        logger.info(f"Successfully saved {source} dataset ({target_path.stat().st_size} bytes)")
+        return target_path
+
+    def load_dataset(
+        self,
+        source: DatasetSource,
+        limit: Optional[int] = None,
+    ) -> List[DatasetItem]:
+        """Loads and normalizes items from local cache or raises error if not downloaded."""
+        path = self.get_local_path(source)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Dataset '{source}' not found locally at {path}. Run download_dataset first."
+            )
+
+        items: List[DatasetItem] = []
+
+        if source == "lima":
+            # LIMA is in JSONL format: {"conversations": ["human prompt", "gpt answer", ...]}
+            with open(path, "r", encoding="utf-8") as f:
+                for idx, line in enumerate(f):
+                    if limit and len(items) >= limit:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        convs = record.get("conversations", [])
+                        if len(convs) >= 2:
+                            human_msg = convs[0].strip()
+                            assistant_msg = convs[1].strip()
+                            items.append(
+                                DatasetItem(
+                                    id=f"lima_{idx}",
+                                    source="lima",
+                                    category="conversation",
+                                    instruction=human_msg,
+                                    input="",
+                                    output=assistant_msg,
+                                    metadata={"turns": len(convs)},
+                                )
+                            )
+                    except json.JSONDecodeError:
+                        continue
+
+        elif source in ("alpaca", "codealpaca"):
+            category = "coding" if source == "codealpaca" else "general_instruction"
+            with open(path, "r", encoding="utf-8") as f:
+                records = json.load(f)
+                for idx, record in enumerate(records):
+                    if limit and len(items) >= limit:
+                        break
+                    items.append(
+                        DatasetItem(
+                            id=f"{source}_{idx}",
+                            source=source,
+                            category=category,
+                            instruction=record.get("instruction", "").strip(),
+                            input=record.get("input", "").strip(),
+                            output=record.get("output", "").strip(),
+                            metadata={},
+                        )
+                    )
+
+        return items
+
+    def load_all_sampled(
+        self,
+        alpaca_limit: int = 1000,
+        codealpaca_limit: int = 1000,
+        lima_limit: Optional[int] = None,
+    ) -> List[DatasetItem]:
+        """Loads a balanced sample of all available datasets."""
+        combined: List[DatasetItem] = []
+        for src, lim in [
+            ("lima", lima_limit),
+            ("alpaca", alpaca_limit),
+            ("codealpaca", codealpaca_limit),
+        ]:
+            if self.is_cached(src):  # type: ignore
+                combined.extend(self.load_dataset(src, limit=lim))  # type: ignore
+        return combined
