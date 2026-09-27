@@ -111,9 +111,7 @@ class GroundingEngine:
 
         for ev in evidence_pool:
             lcs_len = self.compute_lcs(claim, ev.excerpt)
-            ev_tokens = len(re.findall(r"\w+", ev.excerpt))
-            denom = max(claim_tokens, min(ev_tokens, claim_tokens * 2))  # localized excerpt normalization
-            score = lcs_len / max(denom, 1)
+            score = lcs_len / max(claim_tokens, 1)
             # Factor in evidence freshness decay weight
             decayed_score = min(score * ev.decay_weight, 1.0)
             if decayed_score > max_l:

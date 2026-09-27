@@ -92,5 +92,21 @@ class TestGeniusComponents(unittest.TestCase):
         self.assertEqual(res_safe.stdout, "Genius System Online")
 
 
+def suite():
+    s = unittest.TestSuite()
+    loader = unittest.TestLoader()
+    s.addTests(loader.loadTestsFromTestCase(TestGeniusComponents))
+
+    from tests.test_reasoning import TestReasoningEngine
+    s.addTests(loader.loadTestsFromTestCase(TestReasoningEngine))
+
+    from tests.test_grounding_and_memory import TestGroundingAndMemory
+    s.addTests(loader.loadTestsFromTestCase(TestGroundingAndMemory))
+
+    return s
+
+
 if __name__ == "__main__":
-    unittest.main()
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite())
+    sys.exit(0 if result.wasSuccessful() else 1)
