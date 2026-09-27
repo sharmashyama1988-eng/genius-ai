@@ -167,10 +167,12 @@ class DatasetManager:
         alpaca_limit: int = 1000,
         codealpaca_limit: int = 1000,
         lima_limit: Optional[int] = None,
+        claude_reasoning_limit: Optional[int] = None,
     ) -> List[DatasetItem]:
         """Loads a balanced sample of all available datasets."""
         combined: List[DatasetItem] = []
         for src, lim in [
+            ("claude_reasoning", claude_reasoning_limit),
             ("lima", lima_limit),
             ("alpaca", alpaca_limit),
             ("codealpaca", codealpaca_limit),
