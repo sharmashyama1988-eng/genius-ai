@@ -27,6 +27,33 @@ class MultilingualManager:
         )
         return detected
 
+    def load_user_instructions(self, instructions_dir: str | Path = "data/instructions") -> str:
+        """Loads all custom markdown instructions and rules from data/instructions/."""
+        from pathlib import Path
+        p = Path(instructions_dir)
+        if not p.exists() or not p.is_dir():
+            return ""
+
+        instruction_blocks = []
+        for file in sorted(p.glob("*.md")):
+            if file.name.lower() == "readme.md":
+                continue
+            try:
+                content = file.read_text(encoding="utf-8").strip()
+                if content:
+                    instruction_blocks.append(f"### [Custom Instruction: {file.stem}]\n{content}")
+            except Exception as e:
+                logger.warning(f"Failed to read custom instruction {file}: {e}")
+
+        if not instruction_blocks:
+            return ""
+
+        return (
+            "=== USER CUSTOMIZATIONS & OPERATIONAL RULES ===\n"
+            + "\n\n".join(instruction_blocks)
+            + "\n================================================\n\n"
+        )
+
     def get_system_prompt_for_language(
         self,
         detected: DetectedLanguage,
@@ -53,12 +80,15 @@ class MultilingualManager:
             if blocks:
                 exemplar_section = "\n=== COGNITIVE REASONING EXEMPLARS ===\n" + "\n".join(blocks) + "\n=====================================\n\n"
 
+        user_customizations = self.load_user_instructions()
+
         prompt = (
             f"{profile.system_instruction}\n\n"
             f"=== VERIFIED FACTUAL KNOWLEDGE ===\n"
             f"{formatted_context}\n"
             f"==================================\n\n"
             f"{exemplar_section}"
+            f"{user_customizations}"
             f"REASONING & THINKING DIRECTIVE:\n"
             f"1. You MUST first perform structured reasoning inside `<think>` and `</think>` tags.\n"
             f"   {profile.thinking_instruction}\n"

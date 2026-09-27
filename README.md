@@ -1,73 +1,201 @@
-# ⚡ GENIUS — Autonomous Deep-Reasoning & Factual Grounding AI Agent
+# ⚡ GENIUS AI
 
-> **Dual-Core Autonomous Reasoning Engine powered by Qwen2.5-0.5B-Instruct + Live Wikipedia & Web Epistemic Retrieval + Neural Cognitive Schema v1.0**
+### The Autonomous Deep-Reasoning AI that Thinks, Fact-Checks in Real Time, and Runs 100% Locally on Your Computer
 
-[![Architecture: Neural Cognitive Schema v1.0](https://img.shields.io/badge/Schema-v1.0%20Pydantic%20v2-blue.svg)](src/reasoning/schema.py)
-[![Model: Qwen2.5-0.5B-Instruct](https://img.shields.io/badge/Model-Qwen2.5--0.5B--Instruct-brightgreen.svg)](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct)
-[![Dual-Core: Edge + Cloud](https://img.shields.io/badge/Dual--Core-Local%20%7C%20Claude%20%7C%20Ollama-orange.svg)](src/model/provider.py)
-[![Grounding: ROUGE-L + Cosine](https://img.shields.io/badge/Grounding-ROUGE--L%20%2B%20Cosine%20%2B%20Entity%20Penalty-purple.svg)](src/reasoning/grounding.py)
-[![Safety: HITL Guard](https://img.shields.io/badge/Safety-Human--in--the--Loop-red.svg)](src/system/guard.py)
-
----
-
-## 🌟 Overview
-
-**Genius** is a state-of-the-art autonomous reasoning assistant engineered for strict factual grounding, ultra-low latency, and verifiable epistemic provenance. Designed for local edge execution with optional cloud escalation, Genius decomposes complex questions, runs concurrent multi-hop retrieval over Wikimedia and the live web, engages in extended reasoning (`<think>...</think>`), prunes hallucinations through mathematical confidence scoring, and outputs cited answers.
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python: 3.10+](https://img.shields.io/badge/Python-3.10+-brightgreen.svg)](https://www.python.org/)
+[![Model: Edge + Cloud](https://img.shields.io/badge/Engine-Qwen2.5--0.5B%20%7C%20Claude%20%7C%20Ollama-orange.svg)](src/model/provider.py)
+[![Grounding: Zero Hallucination](https://img.shields.io/badge/Grounding-Live%20Wikipedia%20%2B%20Web-purple.svg)](src/retrieval/)
+[![Multilingual: 100+ & Hinglish](https://img.shields.io/badge/Languages-Hinglish%20%7C%20Hindi%20%7C%20English-cyan.svg)](src/languages/)
+[![Platform: Windows | Mac | Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](setup.bat)
 
 ---
 
-## 🧠 Cognitive State Graph Architecture
+## 🌟 What is Genius AI?
 
-```mermaid
-stateDiagram-v2
-    [*] --> Query_Deconstruction
+Most AI assistants guess or hallucinate when they do not know the answer. 
 
-    Query_Deconstruction --> Router_Decision: emit QueryFrame
+**Genius AI** is fundamentally different:
+1. **It Thinks Step-by-Step (`<think>`)**: Before giving an answer, Genius breaks problems down, formulates hypotheses, tests edge cases, and self-corrects in real time (similar to DeepSeek-R1 and OpenAI o1).
+2. **It Fact-Checks Everything**: It queries live Wikipedia and the web to cross-examine its own thoughts and cite authoritative sources.
+3. **It Runs 100% Locally on Your Laptop / PC**: Powered by ultra-efficient edge models (Qwen2.5-0.5B), Genius runs smoothly on everyday CPUs with less than 1GB RAM — **no expensive GPU, subscription, or API keys needed**!
+4. **It Understands You Naturally**: Native multilingual fluency in Hinglish (*"5 nodes mein quorum write consistency kaise ensure karein?"*), Hindi, English, and 100+ languages.
 
-    Router_Decision --> Edge_ShortCircuit: complexity_score < 0.35
-    Router_Decision --> Epistemic_Retrieval: complexity_score >= 0.35
+---
 
-    Edge_ShortCircuit --> Grounded_Synthesis: Qwen2.5-0.5B direct answer
+## ✨ Key Features at a Glance
 
-    Epistemic_Retrieval --> Contradiction_Matrix: parallel fan-in
-    state Epistemic_Retrieval {
-        [*] --> Wiki_Fetch
-        [*] --> DDG_Search
-        [*] --> Exemplar_Match
-        Wiki_Fetch --> [*]
-        DDG_Search --> [*]
-        Exemplar_Match --> [*]
-    }
+| Feature | Description |
+|---|---|
+| 🧠 **Extended Thinking (`<think>`)** | Deep cognitive reflection with live streamable thoughts, hypothesis formulation, and self-critique. |
+| 🌐 **Live Epistemic Retrieval** | Parallel multi-hop retrieval over Wikimedia and DuckDuckGo to provide verified answers with inline `[1]`, `[2]` citations. |
+| 💬 **Visual Chat Experience** | Rounded chat cards in your terminal or 1-click modern dark-mode browser view (`/chatview html`). |
+| 📁 **Autonomous Workspace** | Shift into any project directory, create, read, and edit code files, inspect image dimensions, and launch native image viewers. |
+| 🎨 **No-Code Custom Instructions** | Drop custom `.md` persona or rules into `data/instructions/` and Genius adopts them instantly without coding! |
+| ⚡ **Dual-Core Architecture** | Runs 100% offline on your local CPU by default, with seamless one-command escalation to Claude 3.5 or local Ollama. |
+| 🛡️ **Built-in Safety Guard** | AST-level safety filter preventing accidental execution of destructive shell actions with Human-in-the-Loop confirmation. |
 
-    Contradiction_Matrix --> Latent_xThinking: divergence_map + priors
+---
 
-    state Latent_xThinking {
-        [*] --> Hypothesis_Gen
-        Hypothesis_Gen --> Self_Critique
-        Self_Critique --> Budget_Check
-        Budget_Check --> Hypothesis_Gen: tokens_remaining > 0 AND S_ground < tau_crit
-        Budget_Check --> [*]: converged OR budget_exhausted
-    }
+## 🚀 60-Second Quickstart
 
-    Latent_xThinking --> Hallucination_Pruning: candidate_response
+### 🪟 Windows (1-Click Automated Setup)
 
-    Hallucination_Pruning --> Grounding_Gate
+1. **Setup**: Double-click `setup.bat` (creates virtual environment and installs all dependencies automatically).
+2. **Launch**: Double-click `start_genius.bat` to launch the interactive terminal chat!
 
-    Grounding_Gate --> Epistemic_Retrieval: S_ground < tau_crit AND retries < max_retries
-    Grounding_Gate --> Fallback_HITL: S_ground < tau_crit AND retries >= max_retries
-    Grounding_Gate --> Grounded_Synthesis: S_ground >= tau_crit
+---
 
-    Fallback_HITL --> Grounded_Synthesis: human_ack OR degrade_to_uncertain
+### 🐧 Linux / 🍎 macOS / Manual Setup
 
-    Grounded_Synthesis --> [*]: cited response w/ [n] indices
+```bash
+# 1. Clone the repository
+git clone https://github.com/sharmashyama1988-eng/genius-ai.git
+cd genius-ai
+
+# 2. Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Launch Genius AI
+python run_genius.py
 ```
 
 ---
 
-## 🔬 Mathematical Grounding & Confidence Function (§2)
+## 🎯 How Genius AI Thinks (Simplified Flow)
 
-### 1. Combined Per-Claim Grounding
-For each atomic claim $c_i$ against evidence pool $E$:
+```mermaid
+flowchart LR
+    A["👤 User Question"] --> B{"🔍 Needs Live Info?"}
+    
+    B -- "Needs Live Facts" --> C["🌐 Live Wikipedia & Web Search"]
+    B -- "Direct / Offline" --> D["💭 Deep Thinking Engine"]
+    
+    C --> D
+    D --> E["🛡️ Fact-Check & Anti-Hallucination"]
+    E --> F["🚀 Verified Answer with Citations [1] [2]"]
+```
+
+### The 4 Simple Steps Behind Every Answer:
+1. **Understand**: Genius analyzes your question, detects language (English, Hindi, Hinglish, etc.), and evaluates complexity.
+2. **Retrieve**: If recent or encyclopedic facts are needed, it pulls live data from Wikipedia and the web in parallel.
+3. **Reason**: Inside `<think>...</think>`, Genius forms hypotheses, cross-examines solutions, and catches mistakes before speaking.
+4. **Verify & Deliver**: It mathematically verifies that its response is backed by evidence and outputs a clean, cited answer.
+
+---
+
+## 💡 Usage Examples
+
+### 1. Interactive Chat
+```bash
+python run_genius.py
+```
+Type your query in plain English or natural Hinglish:
+```
+Genius ❯ 5 nodes ke Raft cluster mein leader partition heal hone ke baad stale leader kaise detect hota hai?
+```
+
+### 2. Direct Single-Line Command (Scriptable)
+```bash
+# Fast offline answer
+python run_genius.py "Solve (a+b)^2 and explain geometrically" --research off
+
+# Force live search
+python run_genius.py "Latest discoveries by James Webb Space Telescope" --research on
+
+# Suppress thinking tokens for clean final output
+python run_genius.py "Explain quantum entanglement in simple terms" --no-think
+```
+
+---
+
+## 🎮 Interactive Slash Commands
+
+Inside the Genius terminal, type `/` to access built-in tools:
+
+| Command | What It Does |
+|---|---|
+| `/help` | View all available interactive commands and options |
+| `/chatview [cards\|stream\|html]` | Switch between terminal cards, flowing text, or open full HTML view in your browser |
+| `/project [path]` | Shift workspace into any folder and automatically inspect codebase structure |
+| `/files [subpath]` | Display a clean file tree with human-readable file sizes |
+| `/read <file>` | Read content of any source file or inspect image metadata |
+| `/create <file> [content]` | Quickly create new code or text files inside the active project |
+| `/view <image>` | Read image resolution, byte header, and open in native OS viewer |
+| `/calc <math>` | Solve mathematical equations and series with clean Unicode output |
+| `/code <query>` | Synthesize robust, production-ready algorithms and templates |
+| `/search <query>` | Perform direct live Wikipedia + DuckDuckGo search without LLM inference |
+| `/model [local\|claude\|ollama]` | Switch active reasoning engine core on the fly |
+| `/think` | Toggle live extended thinking (`<think>`) on or off |
+| `/lang [code]` | Force language mode (`en`, `hi-Latn`, `hi`, `es`, `fr`, `de`, `auto`) |
+| `/stats` | View session telemetry, memory footprint, and token stats |
+| `/clear` | Clear screen and reset active conversation memory |
+| `/exit` | Exit the session cleanly |
+
+---
+
+## 🎨 Easy Customization: Add Your Own Rules & Persona
+
+You can customize Genius AI **without modifying any code**:
+1. Open the folder `data/instructions/`.
+2. Add any `.md` file, for example `my_rules.md` or `coding_style.md`:
+   ```markdown
+   # My Rules
+   - Always explain things with simple real-world analogies.
+   - For programming, always use TypeScript and strict types.
+   ```
+3. Genius automatically loads your markdown files on startup and follows your guidelines!
+
+---
+
+## 📂 Project Structure
+
+```
+genius-ai/
+├── data/
+│   ├── datasets/              # Curated exemplar reasoning and instruction datasets
+│   │   ├── genius_reasoning_exemplars.json  # Multi-hop CoT chains with <think>
+│   │   ├── genius_code_instruct.json        # Algorithmic and software engineering pairs
+│   │   └── genius_general_instruct.json     # General high-quality instruction pairs
+│   └── instructions/          # User-customizable markdown instructions & personas
+│       ├── README.md          # Guide on how to add custom rules
+│       ├── system_persona.md  # Core persona guidelines
+│       ├── custom_rules.md    # Operational preferences
+│       └── coding_guidelines.md# Code quality standards
+├── src/
+│   ├── api/                   # REST / WebSocket server endpoints
+│   ├── dataset/               # Dataset loaders and in-context exemplar matchers
+│   ├── languages/             # 100+ Language & Dialect auto-router and prompt synthesizer
+│   ├── memory/                # Persistent SQLite episodic memory and session manager
+│   ├── model/                 # Local Qwen2.5 edge engine + Claude/Ollama cloud router
+│   ├── reasoning/             # Cognitive graph executor, math solver, code solver, sanitizer
+│   ├── retrieval/             # Live Wikipedia client, DuckDuckGo search, and BM25 ranker
+│   ├── system/                # Workspace manager, image inspector, safety guard, chat viewer
+│   └── chat_cli.py            # Rich interactive CLI with rounded cards & HTML exporter
+├── pyproject.toml             # Standard Python packaging specification
+├── requirements.txt           # Python dependencies
+├── setup.bat                  # 1-click Windows installation script
+├── start_genius.bat           # 1-click Windows launcher script
+├── run_genius.py              # Universal launcher entrypoint
+├── LICENSE                    # Apache 2.0 Open Source License
+└── README.md                  # Project documentation
+```
+
+---
+
+<details>
+<summary><b>🔬 Technical Deep Dive & Mathematical Formulations (Click to Expand)</b></summary>
+
+<br>
+
+### 1. Mathematical Grounding & Confidence Function (§2)
+
+#### Atomic Claim Grounding
+For each atomic claim $c_i$ extracted from candidate response against evidence pool $E$:
 - **ROUGE-L Lexical Overlap**:
   $$L(c_i) = \max_{e_j \in E} \frac{\text{LCS}(c_i, e_j)}{\max(|c_i|, |e_j|)}$$
 - **Semantic Overlap (Cosine)**:
@@ -75,10 +203,10 @@ For each atomic claim $c_i$ against evidence pool $E$:
 - **Harmonic Mean**:
   $$G(c_i) = \frac{(1+\beta^2) \cdot L(c_i) \cdot Sem(c_i)}{\beta^2 \cdot L(c_i) + Sem(c_i) + \epsilon}, \quad \beta = 0.7, \epsilon = 10^{-6}$$
 
-### 2. Entity Preservation Penalty
+#### Entity Preservation Penalty
 $$P(c_i) = 1 - \frac{|\text{Ent}(c_i) \setminus \text{Ent}(E)|}{|\text{Ent}(c_i)| + 1}$$
 
-### 3. Aggregate Grounding Score ($S_{ground}$) & Dynamic Threshold ($\tau_{crit}$)
+#### Aggregate Grounding Score ($S_{ground}$) & Dynamic Threshold ($\tau_{crit}$)
 $$S_{ground} = \left( \prod_{i=1}^{n} \big[ G(c_i) \cdot P(c_i) \big]^{w_i} \right)^{1 / \sum w_i}$$
 $$\tau_{crit} = \tau_{base} + \lambda \cdot D, \quad \tau_{base} = 0.62, \lambda = 0.25$$
 
@@ -87,7 +215,7 @@ $$query' = query \oplus \{\text{unsupported entities in } c_i : G(c_i) < \tau_{c
 
 ---
 
-## 💾 Dual-Memory Topology (§4)
+### 2. Dual-Memory Topology (§4)
 
 1. **Fast In-Context Working Memory**:
    - Adaptive thinking budget:
@@ -98,108 +226,13 @@ $$query' = query \oplus \{\text{unsupported entities in } c_i : G(c_i) < \tau_{c
      $$\text{RRF}(d) = \sum_{r \in \{BM25, cos\_sim\}} \frac{1}{k + \text{rank}_r(d)}$$
    - **Salience Decay**:
      $$salience(t) = salience_0 \cdot e^{-\delta (t - t_0)} + \eta \cdot \log(1 + \text{access\_count})$$
-   - **Write-Through**: Atomic persistence of converged trajectories into long-term storage.
 
----
-
-## 🛡️ Human-in-the-Loop (HITL) Safety Guard
-
-All operating system and shell commands undergo rigorous static safety inspection:
-- **SAFE**: Non-destructive diagnostic and read actions (`Get-ChildItem`, `git status`, `python --version`) execute autonomously.
-- **SENSITIVE / BLOCKED**: Destructive operations (`rm`, `del`, `format`, `regedit`, `taskkill`) are **strictly blocked from autonomous execution**. The agent presents the proposed command, explains the safety policy, and requires explicit user confirmation.
-
----
-
-## 🚀 Quickstart
-
-### 1. Launch Options
-
-#### A. Interactive Conversational REPL
-```bash
-python run_genius.py
-# or double-click on Windows:
-start_genius.bat
-```
-
-#### B. Direct Single-Turn Query (Scriptable / Pipe-Friendly)
-```bash
-# General query with smart auto-research routing:
-python run_genius.py "Who was Alan Turing and what was his major contribution?"
-
-# Force live Wikipedia & Web search:
-python run_genius.py "Latest Mars rover discoveries" --research on
-
-# Pure fast offline edge mode (no network requests):
-python run_genius.py "Write a Python script to compute Fibonacci" --research off
-
-# Select model core (local, claude, ollama):
-python run_genius.py "Explain quantum entanglement" -m local -r auto
-
-# Suppress <think> intermediate tokens:
-python run_genius.py "Calculate quorum for 5 nodes" --no-think
-```
-
-### 2. Available Slash Commands (Interactive REPL)
-| Command | Action |
-|---|---|
-| `/research [auto\|on\|off]` | Toggle research mode: `auto` (smart routing), `on` (always search), `off` (direct offline) |
-| `/think` | Toggle live extended thinking stream `<think>...</think>` on/off |
-| `/model [local\|claude\|ollama]` | Switch active reasoning engine core on the fly |
-| `/search <query>` | Standalone live Wikipedia + Web retrieval with BM25 ranking |
-| `/exec <command>` | Safely evaluate and execute shell actions with HITL guard |
-| `/export [md\|json]` | Export conversation transcript and cognitive trajectories |
-| `/sessions` | View saved SQLite conversation sessions |
-| `/lang [code]` | Force language mode (`hi`, `hi-Latn`, `en`, `es`, `fr`, `de`, `auto`) |
-| `/clear` | Clear screen and reset active working memory |
-| `/exit` | Gracefully quit session |
-
----
-
-## 📚 Multi-Source Dataset & In-Context Alignment
-Genius dynamically indexes curated exemplar datasets to guide few-shot mathematical, coding, and reasoning derivations:
-- **Claude Synthetic Reasoning (26 Exemplars)**: High-fidelity multi-hop chains with explicit `<think>` hypothesis formulation, cross-examination, self-critique, and cited conclusions (`hi-Latn`, `en`, `hi`).
-- **Alpaca 52k**: General instruction-following pairs.
-- **CodeAlpaca 20k**: Algorithmic and software engineering tasks.
-- **LIMA**: Curated conversational alignment.
-
-## 📂 Project Structure
-
-```
-llm/
-├── src/
-│   ├── reasoning/
-│   │   ├── schema.py          # Neural Cognitive Schema v1.0 (Pydantic v2)
-│   │   ├── grounding.py       # Mathematical Grounding & Confidence Engine (§2)
-│   │   └── xthinking.py       # 7-node Cognitive State Graph Executor
-│   ├── memory/
-│   │   ├── session.py         # SQLite Session Persistence & Transcript Exporter
-│   │   └── episodic.py        # SQLite FTS5 + Dense Vector Store with RRF & Salience Decay
-│   ├── model/
-│   │   ├── llm_engine.py      # Local Qwen2.5-0.5B-Instruct Engine
-│   │   └── provider.py        # Universal Dual-Core Router (Local, Claude, Ollama)
-│   ├── retrieval/
-│   │   ├── wikipedia_client.py# Wikimedia REST Client with SQLite Cache
-│   │   ├── web_search.py      # DuckDuckGo Live Search API Client
-│   │   └── ranker.py          # BM25 Multi-Hop Passage Chunking & Ranker
-│   ├── dataset/
-│   │   ├── loader.py          # LIMA, Alpaca & CodeAlpaca Dataset Loaders
-│   │   └── retriever.py       # In-Context Exemplar Alignment Retriever
-│   ├── languages/
-│   │   ├── router.py          # 100+ Language & Dialect Auto-Detector
-│   │   └── manager.py         # Native Prompt Generator (Hindi, Hinglish, English, etc.)
-│   ├── system/
-│   │   ├── guard.py           # AST & Regex Action Safety Guard
-│   │   └── executor.py        # HITL Command Executor
-│   └── chat_cli.py            # Rich Interactive Terminal Interface
-├── tests/
-│   ├── test_reasoning.py      # Cognitive pipeline & identity tests
-│   └── run_all_tests.py       # Comprehensive component test suite
-├── auto_git_sync.py           # Autonomous background GitHub synchronizer
-├── run_genius.py              # CLI launcher
-└── start_genius.bat           # Windows quick-launch script
-```
+</details>
 
 ---
 
 ## 📜 License
-Apache-2.0 License. Built with ❤️ for autonomous AI research.
+
+Distributed under the **Apache-2.0 License**. See [LICENSE](LICENSE) for more information.
+
+Built with ❤️ for autonomous AI research.

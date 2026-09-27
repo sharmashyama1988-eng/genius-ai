@@ -74,3 +74,9 @@ Desktop.ini
 *.log
 logs/
 scratch/
+
+# Internal Developer Scripts & Tools
+.dev/
+.dev_tools/
+auto_git_sync.py
+tests/

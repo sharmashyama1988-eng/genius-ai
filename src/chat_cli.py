@@ -543,6 +543,8 @@ class GeniusChatSession:
         # Render response based on chat view mode
         lang_label = detected_info.get("name", "Multilingual") if detected_info else "Grounded"
         active_provider = self.engine.router.active_provider_name.upper()
+        if not response_text.strip() and thinking_text.strip():
+            response_text = thinking_text.strip()
         clean_final_response = TextSanitizer.clean_for_display(response_text)
 
         if self.chat_view_mode == "cards":

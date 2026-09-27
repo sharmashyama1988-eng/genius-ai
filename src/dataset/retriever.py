@@ -55,8 +55,13 @@ class ExemplarRetriever:
     def load_index(self, max_per_source: int = 500) -> None:
         """Loads and indexes items in memory for sub-millisecond retrieval."""
         self.items = []
-        for src in ["claude_reasoning", "codealpaca", "lima", "alpaca"]:
+        seen_paths = set()
+        for src in ["genius_reasoning", "genius_code", "genius_general", "claude_reasoning", "codealpaca", "lima", "alpaca"]:
             if self.manager.is_cached(src):  # type: ignore
+                p = self.manager.get_local_path(src)  # type: ignore
+                if p in seen_paths:
+                    continue
+                seen_paths.add(p)
                 try:
                     loaded = self.manager.load_dataset(src, limit=max_per_source)  # type: ignore
                     self.items.extend(loaded)

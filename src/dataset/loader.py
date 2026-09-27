@@ -11,7 +11,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DatasetSource = Literal["lima", "alpaca", "codealpaca", "claude_reasoning", "custom"]
+DatasetSource = Literal[
+    "lima", "alpaca", "codealpaca", "claude_reasoning",
+    "genius_reasoning", "genius_code", "genius_general", "custom"
+]
 
 RAW_DATASET_URLS: Dict[str, str] = {
     # Alpaca 52k clean instruction dataset
@@ -47,15 +50,31 @@ class DatasetManager:
 
     def get_local_path(self, source: DatasetSource) -> Path:
         """Returns the local path for a dataset."""
-        if source == "claude_reasoning":
-            # Check for genius_claude_reasoning.jsonl or .json first
-            p_jsonl = self.storage_dir / "genius_claude_reasoning.jsonl"
-            if p_jsonl.exists():
-                return p_jsonl
-            p_json = self.storage_dir / "genius_claude_reasoning.json"
-            if p_json.exists():
-                return p_json
-            return p_jsonl
+        if source in ("claude_reasoning", "genius_reasoning", "reasoning"):
+            for candidate in [
+                "genius_reasoning_exemplars.json",
+                "genius_reasoning_exemplars.jsonl",
+                "genius_claude_reasoning.json",
+                "genius_claude_reasoning.jsonl",
+            ]:
+                p = self.storage_dir / candidate
+                if p.exists():
+                    return p
+            return self.storage_dir / "genius_reasoning_exemplars.json"
+
+        if source in ("codealpaca", "genius_code", "coding"):
+            for candidate in ["genius_code_instruct.json", "codealpaca.json"]:
+                p = self.storage_dir / candidate
+                if p.exists():
+                    return p
+            return self.storage_dir / "genius_code_instruct.json"
+
+        if source in ("alpaca", "genius_general", "general"):
+            for candidate in ["genius_general_instruct.json", "alpaca.json"]:
+                p = self.storage_dir / candidate
+                if p.exists():
+                    return p
+            return self.storage_dir / "genius_general_instruct.json"
 
         ext = "jsonl" if source == "lima" else "json"
         return self.storage_dir / f"{source}.{ext}"
@@ -103,7 +122,7 @@ class DatasetManager:
 
         items: List[DatasetItem] = []
 
-        if source in ("lima", "claude_reasoning", "custom") and path.suffix == ".jsonl":
+        if source in ("lima", "claude_reasoning", "genius_reasoning", "custom") and path.suffix == ".jsonl":
             with open(path, "r", encoding="utf-8") as f:
                 for idx, line in enumerate(f):
                     if limit and len(items) >= limit:
@@ -116,7 +135,7 @@ class DatasetManager:
                         instruction = record.get("instruction") or record.get("prompt") or ""
                         output = record.get("output") or record.get("response") or ""
                         inp = record.get("input", "")
-                        category = record.get("category", "reasoning")
+                        category = record.get("category", "conversation" if source == "lima" else "reasoning")
 
                         # Fallback for LIMA conversation format
                         if not instruction and "conversations" in record:
@@ -139,8 +158,14 @@ class DatasetManager:
                     except json.JSONDecodeError:
                         continue
 
-        elif source in ("alpaca", "codealpaca", "claude_reasoning", "custom"):
-            category = "coding" if source == "codealpaca" else "general_instruction"
+        elif source in ("alpaca", "codealpaca", "claude_reasoning", "genius_reasoning", "genius_code", "genius_general", "custom"):
+            if source in ("codealpaca", "genius_code"):
+                default_category = "coding"
+            elif source in ("claude_reasoning", "genius_reasoning"):
+                default_category = "reasoning"
+            else:
+                default_category = "general_instruction"
+
             with open(path, "r", encoding="utf-8") as f:
                 records = json.load(f)
                 if isinstance(records, dict):
@@ -152,7 +177,7 @@ class DatasetManager:
                         DatasetItem(
                             id=f"{source}_{idx}",
                             source=source,
-                            category=record.get("category", category),
+                            category=record.get("category", default_category),
                             instruction=record.get("instruction", "").strip(),
                             input=record.get("input", "").strip(),
                             output=record.get("output", "").strip(),
@@ -172,6 +197,9 @@ class DatasetManager:
         """Loads a balanced sample of all available datasets."""
         combined: List[DatasetItem] = []
         for src, lim in [
+            ("genius_reasoning", claude_reasoning_limit),
+            ("genius_code", codealpaca_limit),
+            ("genius_general", alpaca_limit),
             ("claude_reasoning", claude_reasoning_limit),
             ("lima", lima_limit),
             ("alpaca", alpaca_limit),
