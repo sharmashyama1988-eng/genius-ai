@@ -383,8 +383,47 @@ class GeniusChatSession:
 
 
 def main():
-    session = GeniusChatSession(show_thinking=True)
-    asyncio.run(session.chat_loop())
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="genius",
+        description="Genius: Dual-Core Autonomous Reasoning Agent (xThinking + Epistemic Grounding)",
+    )
+    parser.add_argument(
+        "query",
+        nargs="?",
+        default=None,
+        help="Direct query to solve. If omitted, starts interactive chat session.",
+    )
+    parser.add_argument(
+        "-r", "--research",
+        choices=["auto", "on", "off"],
+        default="auto",
+        help="Research mode: auto (smart routing), on (always search), off (fast direct / offline)",
+    )
+    parser.add_argument(
+        "-m", "--model",
+        choices=["local", "claude", "ollama"],
+        default="local",
+        help="Model provider core (default: local Qwen2.5-0.5B)",
+    )
+    parser.add_argument(
+        "--no-think",
+        action="store_true",
+        help="Suppress intermediate <think> tokens in output",
+    )
+
+    args = parser.parse_args()
+
+    session = GeniusChatSession(show_thinking=not args.no_think)
+    session.engine.set_research_mode(args.research)
+    session.engine.set_model_provider(args.model)
+
+    if args.query:
+        session.print_welcome()
+        asyncio.run(session._process_turn(args.query))
+    else:
+        asyncio.run(session.chat_loop())
 
 
 if __name__ == "__main__":
