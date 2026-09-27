@@ -13,6 +13,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 import httpx
 
 from .llm_engine import QwenEngine
+from ..reasoning.math_solver import MathSolver
 
 logger = logging.getLogger(__name__)
 
