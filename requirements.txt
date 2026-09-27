@@ -1,0 +1,21 @@
+# Core Genius Runtime Dependencies
+pydantic>=2.7.0
+rich>=13.7.0
+httpx>=0.27.0
+aiosqlite>=0.20.0
+duckduckgo_search>=7.0.0
+
+# Optional Local Deep-Learning Edge Model Core (Qwen2.5-0.5B-Instruct)
+torch>=2.2.0
+transformers>=4.40.0
+accelerate>=0.30.0
+tokenizers>=0.19.0
+
+# Universal Cloud Gateways & Providers
+anthropic>=0.30.0
+openai>=1.30.0
+litellm>=1.40.0
+
+# Testing & Quality Engineering
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
