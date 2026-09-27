@@ -106,6 +106,7 @@ class XThinkingEngine:
         session_manager: Optional[SessionManager] = None,
         episodic_manager: Optional[EpisodicMemoryManager] = None,
         grounding_engine: Optional[GroundingEngine] = None,
+        research_mode: str = "auto",
     ) -> None:
         self.router = UniversalModelRouter()
         self.model = model_engine or self.router.get_provider("local")
@@ -118,7 +119,8 @@ class XThinkingEngine:
         self.session_mgr = session_manager or SessionManager()
         self.episodic_mgr = episodic_manager or EpisodicMemoryManager()
         self.grounding_engine = grounding_engine or GroundingEngine()
-        self.research_mode: str = "auto"  # "auto", "on", "off"
+        self.research_mode: str = "auto"
+        self.set_research_mode(research_mode)
 
     def set_model_provider(self, provider_name: str) -> bool:
         """Switch active LLM provider (e.g. 'local', 'claude', 'ollama')."""
