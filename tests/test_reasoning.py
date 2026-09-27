@@ -124,6 +124,30 @@ class TestReasoningEngine(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("research", stages)
         self.assertIn("response", stages)
 
+    def test_math_solver_identities(self):
+        from src.reasoning.math_solver import MathSolver
+        # Test (a+b)^2
+        res = MathSolver.solve("a+b whole square =")
+        self.assertIsNotNone(res)
+        think, resp = res
+        self.assertIn("a^2 + 2ab + b^2", resp)
+        self.assertIn("distributive", think.lower())
+
+        # Test (a-b)^2
+        res_sub = MathSolver.solve("(a-b)^2")
+        self.assertIsNotNone(res_sub)
+        self.assertIn("a^2 - 2ab + b^2", res_sub[1])
+
+        # Test linear equation
+        res_eq = MathSolver.solve("solve 2x + 5 = 15")
+        self.assertIsNotNone(res_eq)
+        self.assertIn("x = 5", res_eq[1])
+
+        # Test circle area
+        res_geom = MathSolver.solve("area of circle")
+        self.assertIsNotNone(res_geom)
+        self.assertIn("\\pi r^2", res_geom[1])
+
 
 if __name__ == "__main__":
     unittest.main()
