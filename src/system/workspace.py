@@ -423,3 +423,85 @@ class WorkspaceManager:
             pass
 
         return None, None
+
+    def handle_natural_language_intent(self, query: str) -> Optional[Tuple[str, str]]:
+        """Detects and executes autonomous project, file, or image commands from natural language."""
+        q = query.strip()
+        q_lower = q.lower()
+
+        # 1. Project / Workspace Shift
+        # Matches: "shift to project F:\..." or "project F:\... pe shift ho jao" or "set workspace to C:\..."
+        shift_match = re.search(
+            r"(?:shift|switch|change|set|go\s+to|open)\s+(?:to\s+)?(?:workspace|project|directory|dir|folder|path)\s+(?:to\s+)?([a-zA-Z]:[\\\/][^\s\"']+|[\\\/][^\s\"']+|\.{1,2}[\\\/][^\s\"']+|[a-zA-Z0-9_\-\.\/\\]+)",
+            q,
+            re.IGNORECASE,
+        )
+        if not shift_match:
+            shift_match = re.search(
+                r"(?:project|workspace|directory|dir|folder|path)\s+([a-zA-Z]:[\\\/][^\s\"']+|[\\\/][^\s\"']+|\.{1,2}[\\\/][^\s\"']+|[a-zA-Z0-9_\-\.\/\\]+)\s*(?:pe\s+)?(?:shift|switch|chalo|set)",
+                q,
+                re.IGNORECASE,
+            )
+
+        if shift_match:
+            target_dir = shift_match.group(1).strip(" \"'")
+            ok, msg, _ = self.set_workspace(target_dir)
+            return ("workspace_shift", msg)
+
+        # 2. File Creation
+        # Matches: "create file main.py with content print('hello')" or "make a file named test.txt"
+        create_match = re.search(
+            r"(?:create|make|write|generate)\s+(?:a\s+)?file\s+(?:named\s+|called\s+)?([a-zA-Z0-9_\-\.\/\\]+\.[a-zA-Z0-9]+)(?:\s+(?:with|content|mein)\s*[:\s]*([\s\S]*))?",
+            q,
+            re.IGNORECASE,
+        )
+        if create_match:
+            fname = create_match.group(1).strip(" \"'")
+            content = create_match.group(2) or ""
+            # Strip enclosing code backticks if passed
+            content = re.sub(r"^```[a-zA-Z0-9]*\n([\s\S]*?)\n```$", r"\1", content.strip())
+            ok, msg = self.create_file(fname, content)
+            return ("file_create", msg)
+
+        # 3. Image Viewing / Inspection
+        # Matches: "show image logo.png" or "view image photo.jpg" or "image test.png dikhao"
+        img_match = re.search(
+            r"(?:show|view|open|display|inspect)\s+(?:the\s+)?image\s+([a-zA-Z0-9_\-\.\/\\]+\.(?:png|jpg|jpeg|webp|gif|bmp|svg|ico))",
+            q,
+            re.IGNORECASE,
+        )
+        if not img_match:
+            img_match = re.search(
+                r"(?:image|photo|picture)\s+([a-zA-Z0-9_\-\.\/\\]+\.(?:png|jpg|jpeg|webp|gif|bmp|svg|ico))\s+(?:dikhao|open|view|show|dekhna)",
+                q,
+                re.IGNORECASE,
+            )
+        if img_match:
+            img_path = img_match.group(1).strip(" \"'")
+            ok, msg, _ = self.inspect_image(img_path, auto_open=True)
+            return ("image_inspect", msg)
+
+        # 4. File Reading
+        # Matches: "read file app.py" or "show file config.json" or "open file data.csv"
+        read_match = re.search(
+            r"(?:read|open|show|cat|display)\s+(?:the\s+)?file\s+([a-zA-Z0-9_\-\.\/\\]+\.[a-zA-Z0-9]+)",
+            q,
+            re.IGNORECASE,
+        )
+        if not read_match:
+            read_match = re.search(
+                r"file\s+([a-zA-Z0-9_\-\.\/\\]+\.[a-zA-Z0-9]+)\s+(?:read|open|padho|dikhao|show)",
+                q,
+                re.IGNORECASE,
+            )
+        if read_match:
+            fname = read_match.group(1).strip(" \"'")
+            ok, msg = self.read_file(fname)
+            return ("file_read", msg)
+
+        # 5. List Files in Project
+        if any(p in q_lower for p in ["list files", "show files", "project files", "directory files", "files in project", "files dikhao", "list all files"]):
+            ok, msg = self.list_files()
+            return ("file_list", msg)
+
+        return None
