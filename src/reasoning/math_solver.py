@@ -1,18 +1,93 @@
 """Autonomous Mathematical & Algebraic Reasoning Engine for Genius.
 
 Provides formal derivations, algebraic expansions, equation solving, calculus,
-geometry, trigonometry, and arithmetic evaluation for foundational edge reasoning.
+geometry, trigonometry, series/progressions, statistics, combinatorics, unit
+conversions, and safe AST expression evaluation for foundational edge reasoning.
 """
 
 from __future__ import annotations
 
+import ast
 import math
+import operator
 import re
-from typing import Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
+
+
+# Safe AST Mathematical Evaluator Configuration
+_SAFE_OPERATORS: Dict[type, Callable[..., Any]] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+_SAFE_FUNCTIONS: Dict[str, Callable[..., Any]] = {
+    "sqrt": math.sqrt,
+    "sin": math.sin,
+    "cos": math.cos,
+    "tan": math.tan,
+    "asin": math.asin,
+    "acos": math.acos,
+    "atan": math.atan,
+    "log": math.log10,
+    "ln": math.log,
+    "exp": math.exp,
+    "abs": abs,
+    "floor": math.floor,
+    "ceil": math.ceil,
+    "fact": math.factorial,
+    "factorial": math.factorial,
+}
+
+_SAFE_CONSTANTS: Dict[str, float] = {
+    "pi": math.pi,
+    "e": math.e,
+}
+
+
+def _eval_ast(node: ast.AST) -> Any:
+    """Recursively evaluates a safe AST math expression."""
+    if isinstance(node, ast.Expression):
+        return _eval_ast(node.body)
+    if isinstance(node, ast.Constant):
+        if isinstance(node.value, (int, float)):
+            return node.value
+        raise ValueError(f"Non-numeric constant: {node.value}")
+    if isinstance(node, ast.BinOp):
+        left = _eval_ast(node.left)
+        right = _eval_ast(node.right)
+        op_type = type(node.op)
+        if op_type in _SAFE_OPERATORS:
+            return _SAFE_OPERATORS[op_type](left, right)
+        raise ValueError(f"Unsupported binary operator: {op_type}")
+    if isinstance(node, ast.UnaryOp):
+        operand = _eval_ast(node.operand)
+        op_type = type(node.op)
+        if op_type in _SAFE_OPERATORS:
+            return _SAFE_OPERATORS[op_type](operand)
+        raise ValueError(f"Unsupported unary operator: {op_type}")
+    if isinstance(node, ast.Name):
+        if node.id.lower() in _SAFE_CONSTANTS:
+            return _SAFE_CONSTANTS[node.id.lower()]
+        raise ValueError(f"Unknown mathematical variable: {node.id}")
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id.lower()
+            if func_name in _SAFE_FUNCTIONS:
+                args = [_eval_ast(arg) for arg in node.args]
+                return _SAFE_FUNCTIONS[func_name](*args)
+        raise ValueError("Unsupported function call")
+    raise ValueError(f"Unsupported AST node: {type(node)}")
 
 
 class MathSolver:
-    """Rigorous analytical mathematics and algebraic identities solver."""
+    """Rigorous analytical mathematics, algebra, calculus, and arithmetic solver."""
 
     @classmethod
     def solve(cls, query: str, lang_style: str = "en") -> Optional[Tuple[str, str]]:
@@ -31,17 +106,37 @@ class MathSolver:
         if res:
             return res
 
-        # 3. Trigonometry & Geometric Formulas
+        # 3. Series & Progressions (AP, GP, Special Sums)
+        res = cls._solve_series(q_norm, lang_style)
+        if res:
+            return res
+
+        # 4. Logarithm Laws & Identities
+        res = cls._solve_logarithms(q_norm, lang_style)
+        if res:
+            return res
+
+        # 5. Trigonometry & Geometric Formulas
         res = cls._solve_geometry_trig(q_norm, lang_style)
         if res:
             return res
 
-        # 4. Calculus (Derivatives & Integrals)
+        # 6. Calculus (Derivatives & Integrals)
         res = cls._solve_calculus(q_norm, lang_style)
         if res:
             return res
 
-        # 5. Direct Arithmetic & Percentages & Physics
+        # 7. Statistics & Combinatorics (nPr, nCr, Bayes)
+        res = cls._solve_stats_combinatorics(q_norm, lang_style)
+        if res:
+            return res
+
+        # 8. Unit & Physical Conversions
+        res = cls._solve_unit_conversions(q_norm, lang_style)
+        if res:
+            return res
+
+        # 9. Direct Arithmetic, Physics & AST Evaluator
         res = cls._solve_arithmetic_physics(q_norm, lang_style)
         if res:
             return res
@@ -235,7 +330,6 @@ class MathSolver:
                 b = int(lin_match.group(2).replace(" ", ""))
                 c = int(lin_match.group(3).replace(" ", ""))
 
-                # ax + b = c  =>  ax = c - b  =>  x = (c - b) / a
                 rhs_step = c - b
                 x_val = rhs_step / a
                 x_str = str(int(x_val)) if x_val.is_integer() else f"{x_val:.3f}"
@@ -263,8 +357,82 @@ class MathSolver:
         return None
 
     @classmethod
+    def _solve_series(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
+        """Handles Arithmetic Progression (AP), Geometric Progression (GP), and series sums."""
+        # AP formulas
+        if any(w in q for w in ["arithmetic progression", "ap formula", "nth term of ap", "sum of ap"]):
+            think = "[Query Deconstruction]: Formulating standard Arithmetic Progression (AP) equations."
+            resp = (
+                "### 📈 Arithmetic Progression (AP) Core Formulas:\n\n"
+                "Let \\(a\\) be the first term and \\(d\\) be the common difference.\n\n"
+                "1. **\\(n\\)-th Term (\\(a_n\\) or \\(T_n\\))**:\n"
+                "   $$\\mathbf{a_n = a + (n - 1)d}$$\n\n"
+                "2. **Sum of First \\(n\\) Terms (\\(S_n\\))**:\n"
+                "   $$\\mathbf{S_n = \\frac{n}{2} [2a + (n - 1)d] = \\frac{n}{2} (a + l)}$$\n"
+                "   *(where \\(l = a_n\\) is the last term)*.\n\n"
+                "3. **Common Difference (\\(d\\))**:\n"
+                "   $$d = a_k - a_{k-1}$$"
+            )
+            return think, resp
+
+        # GP formulas
+        if any(w in q for w in ["geometric progression", "gp formula", "nth term of gp", "sum of gp"]):
+            think = "[Query Deconstruction]: Formulating standard Geometric Progression (GP) equations."
+            resp = (
+                "### 📊 Geometric Progression (GP) Core Formulas:\n\n"
+                "Let \\(a\\) be the first term and \\(r\\) be the common ratio (\\(r \\neq 1\\)).\n\n"
+                "1. **\\(n\\)-th Term (\\(a_n\\) or \\(T_n\\))**:\n"
+                "   $$\\mathbf{a_n = a \\cdot r^{n-1}}$$\n\n"
+                "2. **Sum of First \\(n\\) Terms (\\(S_n\\))**:\n"
+                "   $$\\mathbf{S_n = \\frac{a(r^n - 1)}{r - 1}} \\quad (r > 1) \\quad \\text{or} \\quad \\mathbf{S_n = \\frac{a(1 - r^n)}{1 - r}} \\quad (r < 1)$$\n\n"
+                "3. **Sum to Infinity (\\(S_\\infty\\))** (valid only when \\(|r| < 1\\)):\n"
+                "   $$\\mathbf{S_\\infty = \\frac{a}{1 - r}}$$"
+            )
+            return think, resp
+
+        # Sum of first n natural numbers, squares, cubes
+        if any(w in q for w in ["sum of first n natural numbers", "sum of natural numbers", "sum of squares of n"]):
+            think = "[Query Deconstruction]: Closed-form summation formulas for power series."
+            resp = (
+                "### 🔢 Standard Series Summation Formulas:\n\n"
+                "1. **Sum of first \\(n\\) natural numbers**:\n"
+                "   $$\\mathbf{\\sum_{k=1}^n k = 1 + 2 + 3 + \\dots + n = \\frac{n(n + 1)}{2}}$$\n\n"
+                "2. **Sum of squares of first \\(n\\) natural numbers**:\n"
+                "   $$\\mathbf{\\sum_{k=1}^n k^2 = 1^2 + 2^2 + \\dots + n^2 = \\frac{n(n + 1)(2n + 1)}{6}}$$\n\n"
+                "3. **Sum of cubes of first \\(n\\) natural numbers**:\n"
+                "   $$\\mathbf{\\sum_{k=1}^n k^3 = 1^3 + 2^3 + \\dots + n^3 = \\left[ \\frac{n(n + 1)}{2} \\right]^2}$$"
+            )
+            return think, resp
+
+        return None
+
+    @classmethod
+    def _solve_logarithms(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
+        """Handles logarithm rules and identities."""
+        if any(w in q for w in ["log rules", "logarithm formulas", "laws of log", "log properties"]):
+            think = "[Query Deconstruction]: Fundamental algebraic laws and properties of logarithms."
+            resp = (
+                "### 🪵 Core Laws of Logarithms:\n\n"
+                "For any base \\(b > 0, b \\neq 1\\) and positive arguments \\(x, y\\):\n\n"
+                "1. **Product Rule**:\n"
+                "   $$\\mathbf{\\log_b(xy) = \\log_b(x) + \\log_b(y)}$$\n\n"
+                "2. **Quotient Rule**:\n"
+                "   $$\\mathbf{\\log_b\\left(\\frac{x}{y}\\right) = \\log_b(x) - \\log_b(y)}$$\n\n"
+                "3. **Power Rule**:\n"
+                "   $$\\mathbf{\\log_b(x^k) = k \\cdot \\log_b(x)}$$\n\n"
+                "4. **Change of Base Formula**:\n"
+                "   $$\\mathbf{\\log_b(x) = \\frac{\\log_a(x)}{\\log_a(b)} = \\frac{\\ln(x)}{\\ln(b)}}$$\n\n"
+                "5. **Fundamental Identities**:\n"
+                "   * \\(\\log_b(1) = 0\\)\n"
+                "   * \\(\\log_b(b) = 1\\)\n"
+                "   * \\(b^{\\log_b(x)} = x\\)"
+            )
+            return think, resp
+        return None
+
+    @classmethod
     def _solve_geometry_trig(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
-        """Handles circle, triangle, sphere geometry, and trig formulas."""
+        """Handles geometry, trigonometry, and Pythagorean formulas."""
         # Pythagorean theorem
         if any(w in q for w in ["pythagor", "hypotenuse", "right angle triangle"]):
             think = "[Query Deconstruction]: Pythagorean Theorem relating sides a, b, c of a right-angled triangle."
@@ -299,6 +467,17 @@ class MathSolver:
             )
             return think, resp
 
+        # Volume of cylinder
+        if "volume of cylinder" in q or "cylinder volume" in q:
+            think = "[Query Deconstruction]: Formula for cylinder volume V = pi * r^2 * h."
+            resp = (
+                "The **Volume of a Cylinder** with radius \\(r\\) and height \\(h\\) is:\n\n"
+                "$$\\mathbf{V = \\pi r^2 h}$$\n\n"
+                "* Curved Surface Area (CSA): \\(\\mathbf{2\\pi r h}\\)\n"
+                "* Total Surface Area (TSA): \\(\\mathbf{2\\pi r (r + h)}\\)"
+            )
+            return think, resp
+
         # Basic Trig Identities
         if any(w in q for w in ["trigonometric identities", "sin^2 + cos^2", "sin square plus cos square"]):
             think = "[Query Deconstruction]: Core trigonometric Pythagorean identities."
@@ -309,7 +488,8 @@ class MathSolver:
                 "3. $$\\mathbf{1 + \\cot^2\\theta = \\csc^2\\theta}$$\n\n"
                 "### Double Angle Formulas:\n"
                 "* \\(\\sin(2\\theta) = 2\\sin\\theta\\cos\\theta\\)\n"
-                "* \\(\\cos(2\\theta) = \\cos^2\\theta - \\sin^2\\theta = 2\\cos^2\\theta - 1 = 1 - 2\\sin^2\\theta\\)"
+                "* \\(\\cos(2\\theta) = \\cos^2\\theta - \\sin^2\\theta = 2\\cos^2\\theta - 1 = 1 - 2\\sin^2\\theta\\)\n"
+                "* \\(\\tan(2\\theta) = \\frac{2\\tan\\theta}{1 - \\tan^2\\theta}\\)"
             )
             return think, resp
 
@@ -319,7 +499,6 @@ class MathSolver:
     def _solve_calculus(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
         """Handles common derivatives and integrals."""
         if any(w in q for w in ["derivative of", "d/dx", "differentiation of"]):
-            # Specific standard functions
             if "sin" in q:
                 return (
                     "[Query Deconstruction]: First derivative of sin(x).",
@@ -345,24 +524,95 @@ class MathSolver:
                     "[Query Deconstruction]: Derivative of natural logarithm ln(x).",
                     "$$\\mathbf{\\frac{d}{dx}[\\ln(x)] = \\frac{1}{x}} \\quad (x > 0)$$"
                 )
-            # Power rule general
             return (
                 "[Query Deconstruction]: Power rule for derivatives.",
-                "### Power Rule of Differentiation:\n$$\\mathbf{\\frac{d}{dx}[x^n] = n x^{n-1}}$$\n\n* **Product Rule**: \\((uv)' = u'v + uv'\\)\n* **Quotient Rule**: \\(\\left(\\frac{u}{v}\\right)' = \\frac{u'v - uv'}{v^2}\\)\n* **Chain Rule**: \\(\\frac{d}{dx}[f(g(x))] = f'(g(x)) \\cdot g'(x)\\)"
+                "### Power Rule of Differentiation:\n$$\\mathbf{\\frac{d}{dx}[x^n] = n x^{n-1}}$$\n\n"
+                "* **Product Rule**: \\((uv)' = u'v + uv'\\)\n"
+                "* **Quotient Rule**: \\(\\left(\\frac{u}{v}\\right)' = \\frac{u'v - uv'}{v^2}\\)\n"
+                "* **Chain Rule**: \\(\\frac{d}{dx}[f(g(x))] = f'(g(x)) \\cdot g'(x)\\)"
             )
 
         if any(w in q for w in ["integral of", "integration of", "anti-derivative"]):
             return (
                 "[Query Deconstruction]: Fundamental power rule of integration.",
-                "### Power Rule of Integration:\n$$\\mathbf{\\int x^n dx = \\frac{x^{n+1}}{n+1} + C} \\quad (n \\neq -1)$$\n\n* \\(\\int \\frac{1}{x} dx = \\ln|x| + C\\)\n* \\(\\int e^x dx = e^x + C\\)\n* \\(\\int \\sin(x) dx = -\\cos(x) + C\\)\n* \\(\\int \\cos(x) dx = \\sin(x) + C\\)"
+                "### Power Rule of Integration:\n$$\\mathbf{\\int x^n dx = \\frac{x^{n+1}}{n+1} + C} \\quad (n \\neq -1)$$\n\n"
+                "* \\(\\int \\frac{1}{x} dx = \\ln|x| + C\\)\n"
+                "* \\(\\int e^x dx = e^x + C\\)\n"
+                "* \\(\\int \\sin(x) dx = -\\cos(x) + C\\)\n"
+                "* \\(\\int \\cos(x) dx = \\sin(x) + C\\)"
             )
 
         return None
 
     @classmethod
+    def _solve_stats_combinatorics(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
+        """Handles Bayes' theorem, permutations, combinations, and basic statistics."""
+        # Bayes theorem
+        if "bayes" in q:
+            think = "[Query Deconstruction]: Bayes' Theorem for conditional probability."
+            resp = (
+                "### 🎲 Bayes' Theorem:\n\n"
+                "$$\\mathbf{P(A|B) = \\frac{P(B|A) \\cdot P(A)}{P(B)}}$$\n\n"
+                "Where:\n"
+                "* \\(P(A|B)\\): **Posterior Probability** (probability of hypothesis \\(A\\) given evidence \\(B\\)).\n"
+                "* \\(P(B|A)\\): **Likelihood** (probability of evidence \\(B\\) given hypothesis \\(A\\)).\n"
+                "* \\(P(A)\\): **Prior Probability** of hypothesis \\(A\\).\n"
+                "* \\(P(B)\\): **Marginal Probability** of evidence \\(B\\) (\\(\\sum_i P(B|A_i)P(A_i)\\))."
+            )
+            return think, resp
+
+        # Combinatorics formulas (nPr & nCr)
+        if any(w in q for w in ["permutation formula", "combination formula", "npr", "ncr"]):
+            think = "[Query Deconstruction]: Combinatorics definitions for Permutations (nPr) and Combinations (nCr)."
+            resp = (
+                "### 🔢 Permutations & Combinations:\n\n"
+                "1. **Permutations (Order Matters)**:\n"
+                "   $$\\mathbf{P(n, r) = {}^n P_r = \\frac{n!}{(n - r)!}}$$\n\n"
+                "2. **Combinations (Order Does NOT Matter)**:\n"
+                "   $$\\mathbf{C(n, r) = {}^n C_r = \\binom{n}{r} = \\frac{n!}{r! (n - r)!}}$$\n\n"
+                "### Key Property:\n"
+                "* \\({}^n C_r = {}^n C_{n-r}\\)\n"
+                "* \\({}^n C_0 = {}^n C_n = 1\\)\n"
+                "* \\({}^n P_r = r! \\cdot {}^n C_r\\)"
+            )
+            return think, resp
+
+        return None
+
+    @classmethod
+    def _solve_unit_conversions(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
+        """Handles Celsius <-> Fahrenheit <-> Kelvin temperature conversions."""
+        # Temperature: e.g. convert 100 c to f or 37 celsius in fahrenheit
+        c_to_f = re.search(r"(\d+(?:\.\d+)?)\s*(?:c|celsius)\s+(?:to|in|mein)\s+(?:f|fahrenheit)", q)
+        if c_to_f:
+            c = float(c_to_f.group(1))
+            f = (c * 9.0 / 5.0) + 32.0
+            think = f"[Query Deconstruction]: Temperature conversion: F = (C * 9/5) + 32. C={c} -> F={f:.2f}."
+            resp = (
+                f"### Temperature Conversion (Celsius to Fahrenheit):\n\n"
+                f"* **Formula**: $$\\mathbf{{F = \\left(C \\times \\frac{{9}}{{5}}\\right) + 32}}$$\n"
+                f"* **Calculation**: $$\\left({c} \\times 1.8\\right) + 32 = \\mathbf{{{f:.2f}^\\circ \\text{{F}}}}$$"
+            )
+            return think, resp
+
+        f_to_c = re.search(r"(\d+(?:\.\d+)?)\s*(?:f|fahrenheit)\s+(?:to|in|mein)\s+(?:c|celsius)", q)
+        if f_to_c:
+            f = float(f_to_c.group(1))
+            c = (f - 32.0) * 5.0 / 9.0
+            think = f"[Query Deconstruction]: Temperature conversion: C = (F - 32) * 5/9. F={f} -> C={c:.2f}."
+            resp = (
+                f"### Temperature Conversion (Fahrenheit to Celsius):\n\n"
+                f"* **Formula**: $$\\mathbf{{C = (F - 32) \\times \\frac{{5}}{{9}}}}$$\n"
+                f"* **Calculation**: $$({f} - 32) \\times \\frac{{5}}{{9}} = \\mathbf{{{c:.2f}^\\circ \\text{{C}}}}$$"
+            )
+            return think, resp
+
+        return None
+
+    @classmethod
     def _solve_arithmetic_physics(cls, q: str, lang: str) -> Optional[Tuple[str, str]]:
-        """Handles direct arithmetic expressions, speed/distance/time, and percentages."""
-        # Speed distance time calculation (e.g. 120km in 2 hours or speed of train)
+        """Handles kinematics, percentages, square roots, and safe AST expression evaluation."""
+        # Speed distance time calculation (e.g. 120km in 2 hours)
         sdt_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:km|miles|m)\b.*?(\d+(?:\.\d+)?)\s*(?:hours|hour|hrs|hr|seconds|sec|s)\b", q)
         if sdt_match and ("speed" in q or "velocity" in q or "chal" in q or "gati" in q):
             try:
@@ -403,16 +653,38 @@ class MathSolver:
             except Exception:
                 pass
 
-        # Safe arithmetic calculation (e.g. 25 * 4, 1024 / 16, 2^8, sqrt(144))
-        # Square root
+        # Square root: sqrt(144) or square root of 144
         sqrt_match = re.search(r"(?:sqrt|square\s+root\s+of)\s*\(?(\d+(?:\.\d+)?)\)?", q)
         if sqrt_match:
-            val = float(sqrt_match.group(1))
-            res = math.sqrt(val)
-            res_str = str(int(res)) if res.is_integer() else f"{res:.4f}"
-            return (
-                f"[Query Deconstruction]: Square root of {val}: sqrt({val}) = {res_str}.",
-                f"$$\\mathbf{{\\sqrt{{{val}}} = {res_str}}}$$"
-            )
+            try:
+                val = float(sqrt_match.group(1))
+                res = math.sqrt(val)
+                res_str = str(int(res)) if res.is_integer() else f"{res:.4f}"
+                return (
+                    f"[Query Deconstruction]: Square root of {val}: sqrt({val}) = {res_str}.",
+                    f"$$\\mathbf{{\\sqrt{{{val}}} = {res_str}}}$$"
+                )
+            except Exception:
+                pass
+
+        # General Safe AST Evaluation for expressions like "calculate 2^10 + 50 * 3"
+        expr_cand = q
+        for prefix in ["calculate", "solve", "evaluate", "what is", "compute", "value of"]:
+            if expr_cand.startswith(prefix):
+                expr_cand = expr_cand[len(prefix):].strip()
+        expr_cand = expr_cand.rstrip(" =?").strip()
+
+        # Check if expr_cand looks like a pure math expression
+        if re.search(r"^[\d\.\s\+\-\*\/\^\(\)\,\w]+$", expr_cand) and re.search(r"[\+\-\*\/\^]", expr_cand):
+            try:
+                clean_expr = expr_cand.replace("^", "**").replace("×", "*").replace("÷", "/")
+                tree = ast.parse(clean_expr, mode="eval")
+                val = _eval_ast(tree)
+                val_str = str(int(val)) if isinstance(val, (int, float)) and float(val).is_integer() else f"{val:.4f}"
+                think = f"[Query Deconstruction]: Evaluating arithmetic expression: {expr_cand} = {val_str}."
+                resp = f"$$\\mathbf{{{expr_cand} = {val_str}}}$$"
+                return think, resp
+            except Exception:
+                pass
 
         return None
