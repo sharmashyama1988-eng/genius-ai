@@ -377,8 +377,8 @@ class GeniusChatSession:
 
         sys.stdout.write("\n\n")
 
-        # Grounding & Citations Telemetry Table
-        if citations_data or verdict_data:
+        # Grounding & Citations Telemetry Table (only shown when external sources were cited)
+        if citations_data:
             s_ground = verdict_data.get("s_ground", 1.0) if verdict_data else 1.0
             tau_crit = verdict_data.get("tau_crit", 0.62) if verdict_data else 0.62
             action = verdict_data.get("action", "emit") if verdict_data else "emit"

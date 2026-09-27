@@ -157,8 +157,46 @@ class XThinkingEngine:
             return query.strip()
         return " ".join(filtered[:8])
 
+    @staticmethod
+    def _is_conversational(query: str) -> bool:
+        """Determines if query is greeting, chitchat, status inquiry, or gratitude."""
+        q_clean = re.sub(r"[^\w\s]", "", query.lower().strip())
+        tokens = q_clean.split()
+        if not tokens:
+            return True
+
+        conv_phrases = {
+            "hi", "hello", "hey", "namaste", "namaskar", "halo", "yo", "sup", "pranam",
+            "bye", "goodbye", "good morning", "good evening", "good afternoon", "good night",
+            "how are you", "how are you doing", "how do you do", "how is it going", "hows it going",
+            "how r u", "how r you", "whats up", "what is up", "what are you", "who are you",
+            "tum kaun ho", "kaise ho", "kya haal hai", "kya haal", "aap kaise hain", "kaise ho aap",
+            "sab theek", "kya chal raha hai", "thanks", "thank you", "dhanyawad", "shukriya",
+            "introduce yourself", "tell me about yourself", "your name", "what is your name",
+        }
+        if q_clean in conv_phrases:
+            return True
+
+        conv_patterns = [
+            r"\bhow\s+are\s+you\b", r"\bhow\s+r\s+u\b", r"\bhow\s+do\s+you\s+do\b",
+            r"\bhow\s+is\s+it\s+going\b", r"\bhows\s+it\s+going\b", r"\bwhat\s*s\s+up\b",
+            r"\bwhats\s+up\b", r"\bkaise\s+ho\b", r"\bkya\s+haal\b", r"\bsab\s+theek\b",
+            r"\baap\s+kaise\s+hain\b", r"\bkya\s+chal\s+raha\b", r"\bwho\s+are\s+you\b",
+            r"\btum\s+kaun\s+ho\b", r"\bwhat\s+are\s+you\b", r"\bintroduce\s+yourself\b",
+        ]
+        if any(re.search(pat, q_clean) for pat in conv_patterns):
+            return True
+
+        if len(tokens) <= 3 and any(w in {"hi", "hello", "hey", "namaste", "bye", "yo", "sup"} for w in tokens):
+            return True
+
+        return False
+
     def _detect_category(self, query: str) -> str:
-        """Determines if query is coding, math, general knowledge, or conversational."""
+        """Determines if query is conversational, coding, math, or general knowledge."""
+        if self._is_conversational(query):
+            return "conversational"
+
         q_lower = query.lower()
         code_indicators = [
             "code", "python", "javascript", "function", "class", "algorithm",
@@ -181,16 +219,10 @@ class XThinkingEngine:
 
     def _compute_complexity(self, query: str) -> float:
         """Computes query complexity score in [0.0, 1.0]. Under 0.35 short-circuits to edge synthesis."""
-        q_clean = query.strip().lower()
+        if self._is_conversational(query):
+            return 0.10
 
-        # Pure greetings and identity queries
-        simple_phrases = {
-            "hi", "hello", "hey", "namaste", "halo", "kaise ho", "who are you",
-            "tum kaun ho", "kya haal hai", "good morning", "good evening", "bye",
-            "thanks", "thank you", "dhanyawad", "shukriya",
-        }
-        if q_clean in simple_phrases or len(q_clean.split()) <= 2 and any(p in q_clean for p in simple_phrases):
-            return 0.15
+        q_clean = query.strip().lower()
 
         # Informational or reasoning queries
         score = 0.4
@@ -274,8 +306,9 @@ class XThinkingEngine:
         elif active_mode in ("on", "always", "enabled"):
             should_retrieve = True
         else:  # auto
-            # Pure math and analytical problems are solved directly without encyclopedia lookups
-            if category == "math" and not any(w in question.lower() for w in ["history", "who discovered", "who proved", "biography", "origin"]):
+            if category == "conversational" or self._is_conversational(question):
+                should_retrieve = False
+            elif category == "math" and not any(w in question.lower() for w in ["history", "who discovered", "who proved", "biography", "origin"]):
                 should_retrieve = False
             else:
                 should_retrieve = (complexity_score >= 0.35)
@@ -394,10 +427,13 @@ class XThinkingEngine:
 
             formatted_context = "\n\n".join(context_blocks) if context_blocks else "No direct external facts found."
 
-        # In-context exemplars
-        exemplars = self.exemplar_retriever.find_relevant_exemplars(
-            question, category=category if category == "codealpaca" else None, top_k=1
-        )
+        # In-context exemplars (bypassed for conversational / greeting queries)
+        if category == "conversational" or self._is_conversational(question):
+            exemplars = []
+        else:
+            exemplars = self.exemplar_retriever.find_relevant_exemplars(
+                question, category=category if category == "codealpaca" else None, top_k=1
+            )
         if exemplars:
             yield ReasoningEvent(
                 stage="exemplar",
