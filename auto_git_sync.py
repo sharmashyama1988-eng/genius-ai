@@ -73,12 +73,12 @@ def sync_cycle(repo_dir: Path, branch: str = "main", remote: str = "origin") -> 
     if not changes:
         return False
 
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 📦 Detected {len(changes)} modified file(s). Staging...")
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 📦 Detected {len(changes)} modified file(s). Staging...", flush=True)
 
     # Stage changes
     c_add, out_add, err_add = run_cmd(["git", "add", "."], repo_dir)
     if c_add != 0:
-        print(f"[!] git add failed: {err_add}")
+        print(f"[!] git add failed: {err_add}", flush=True)
         return False
 
     # Check if anything is actually staged
@@ -90,25 +90,25 @@ def sync_cycle(repo_dir: Path, branch: str = "main", remote: str = "origin") -> 
     commit_msg = generate_commit_message(changes)
     c_commit, out_commit, err_commit = run_cmd(["git", "commit", "-m", commit_msg], repo_dir)
     if c_commit != 0:
-        print(f"[!] git commit failed: {err_commit}")
+        print(f"[!] git commit failed: {err_commit}", flush=True)
         return False
 
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Committed: '{commit_msg}'")
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Committed: '{commit_msg}'", flush=True)
 
     # Push
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🚀 Pushing to {remote}/{branch}...")
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🚀 Pushing to {remote}/{branch}...", flush=True)
     c_push, out_push, err_push = run_cmd(["git", "push", remote, branch], repo_dir)
     if c_push == 0:
-        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎉 Successfully pushed to GitHub!")
+        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎉 Successfully pushed to GitHub!", flush=True)
         return True
     else:
         # If upstream branch not set, try with -u
         if "no upstream branch" in err_push or "has no upstream" in err_push:
             c_u, _, _ = run_cmd(["git", "push", "-u", remote, branch], repo_dir)
             if c_u == 0:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎉 Pushed and set upstream to {remote}/{branch}!")
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🎉 Pushed and set upstream to {remote}/{branch}!", flush=True)
                 return True
-        print(f"[!] git push failed: {err_push or out_push}")
+        print(f"[!] git push failed: {err_push or out_push}", flush=True)
         return False
 
 
