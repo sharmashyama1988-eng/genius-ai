@@ -130,13 +130,13 @@ class TestReasoningEngine(unittest.IsolatedAsyncioTestCase):
         res = MathSolver.solve("a+b whole square =")
         self.assertIsNotNone(res)
         think, resp = res
-        self.assertIn("a^2 + 2ab + b^2", resp)
+        self.assertTrue("a² + 2ab + b²" in resp or "a^2 + 2ab + b^2" in resp)
         self.assertIn("distributive", think.lower())
 
         # Test (a-b)^2
         res_sub = MathSolver.solve("(a-b)^2")
         self.assertIsNotNone(res_sub)
-        self.assertIn("a^2 - 2ab + b^2", res_sub[1])
+        self.assertTrue("a² - 2ab + b²" in res_sub[1] or "a^2 - 2ab + b^2" in res_sub[1])
 
         # Test linear equation
         res_eq = MathSolver.solve("solve 2x + 5 = 15")
@@ -146,7 +146,57 @@ class TestReasoningEngine(unittest.IsolatedAsyncioTestCase):
         # Test circle area
         res_geom = MathSolver.solve("area of circle")
         self.assertIsNotNone(res_geom)
-        self.assertIn("\\pi r^2", res_geom[1])
+        self.assertTrue("πr²" in res_geom[1] or "π r²" in res_geom[1])
+
+    def test_text_sanitizer(self):
+        from src.reasoning.text_sanitizer import TextSanitizer
+        raw = "### Title\n$$\\mathbf{(a + b)^2 = a^2 + 2ab + b^2}$$\n* Item 1\n**bold**"
+        clean = TextSanitizer.clean_for_display(raw)
+        self.assertNotIn("$$", clean)
+        self.assertNotIn("\\mathbf", clean)
+        self.assertNotIn("###", clean)
+        self.assertNotIn("**", clean)
+        self.assertIn("(a + b)² = a² + 2ab + b²", clean)
+        self.assertIn("• Item 1", clean)
+
+    def test_workspace_manager_and_intents(self):
+        import tempfile
+        from src.system.workspace import WorkspaceManager
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wm = WorkspaceManager(initial_path=tmpdir)
+            ok, msg = wm.create_file("test.py", "print('hello from workspace')")
+            self.assertTrue(ok)
+
+            ok, rmsg = wm.read_file("test.py")
+            self.assertTrue(ok)
+            self.assertIn("hello from workspace", rmsg)
+
+            ok, lmsg = wm.list_files()
+            self.assertTrue(ok)
+            self.assertIn("test.py", lmsg)
+
+            # Test Natural Language Intent
+            res = wm.handle_natural_language_intent("create file note.txt with content Important Note")
+            self.assertIsNotNone(res)
+            self.assertEqual(res[0], "file_create")
+
+            read_res = wm.handle_natural_language_intent("read file note.txt")
+            self.assertIsNotNone(read_res)
+            self.assertEqual(read_res[0], "file_read")
+            self.assertIn("Important Note", read_res[1])
+
+    def test_code_and_concept_solvers(self):
+        from src.reasoning.code_solver import CodeSolver
+        from src.reasoning.concept_synthesizer import ConceptSynthesizer
+
+        code_res = CodeSolver.solve("binary search in python")
+        self.assertIsNotNone(code_res)
+        self.assertIn("def binary_search", code_res[1])
+
+        concept_res = ConceptSynthesizer.synthesize("kafka architecture")
+        self.assertIsNotNone(concept_res)
+        self.assertIn("Kafka", concept_res[1])
 
 
 if __name__ == "__main__":
