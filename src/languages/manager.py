@@ -47,7 +47,7 @@ class MultilingualManager:
                     blocks.append(
                         f"--- EXEMPLAR {idx} [{src}] ---\n"
                         f"Query: {instr}\n"
-                        f"Demonstrated Reasoning:\n{out[:1200]}\n"
+                        f"Demonstrated Reasoning:\n{out[:4500]}\n"
                         f"-----------------------------"
                     )
             if blocks:
