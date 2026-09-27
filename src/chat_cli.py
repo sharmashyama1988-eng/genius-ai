@@ -46,6 +46,8 @@ class GeniusChatSession:
         banner.append("⚡ GENIUS : AUTONOMOUS DEEP RESEARCHER & REASONING AI\n", style="bold cyan")
         banner.append("• Model Core: ", style="bold white")
         banner.append(f"{active_model.upper()} (Qwen2.5-0.5B-Instruct edge default)\n", style="green")
+        banner.append("• Research Mode: ", style="bold white")
+        banner.append(f"{self.engine.research_mode.upper()} (auto / on / off toggleable)\n", style="cyan")
         banner.append("• Neural Schema: ", style="bold white")
         banner.append("v1.0 (ROUGE-L + Cosine Grounding Gate, Dynamic tau_crit)\n", style="bright_magenta")
         banner.append("• Memory Topology: ", style="bold white")
@@ -55,7 +57,7 @@ class GeniusChatSession:
         banner.append("• Safety Guard: ", style="bold white")
         banner.append("Human-in-the-Loop (HITL) Static AST/Regex Command Guardian\n", style="red")
         banner.append("• Commands: ", style="bold white")
-        banner.append("/model, /search, /exec, /export, /sessions, /think, /lang, /clear, /exit\n", style="dim")
+        banner.append("/research, /model, /search, /exec, /export, /sessions, /think, /lang, /clear, /exit\n", style="dim")
 
         self.console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
@@ -107,6 +109,21 @@ class GeniusChatSession:
             self.show_thinking = not self.show_thinking
             status_str = "VISIBLE" if self.show_thinking else "HIDDEN"
             self.console.print(f"[dim]xThinking stream display is now: [bold]{status_str}[/bold][/dim]")
+
+        elif cmd in ("/research", "/mode"):
+            if not arg:
+                curr = self.engine.research_mode.upper()
+                self.console.print(f"[bold cyan]Current Research Mode:[/bold cyan] [bold green]{curr}[/bold green]")
+                self.console.print("  • [yellow]auto[/yellow]   - Intelligent routing (short-circuits simple queries, searches for factual questions)")
+                self.console.print("  • [yellow]on[/yellow]     - Always perform parallel Wikipedia + Web search for every turn")
+                self.console.print("  • [yellow]off[/yellow]    - Fast direct / offline mode (bypasses all web/wiki requests, runs directly from model)")
+                self.console.print("[dim]Usage: /research [auto|on|off][/dim]")
+            else:
+                if self.engine.set_research_mode(arg):
+                    new_mode = self.engine.research_mode.upper()
+                    self.console.print(f"[green]✓ Research mode updated to: [bold]{new_mode}[/bold][/green]")
+                else:
+                    self.console.print(f"[red]Unknown mode '{arg}'. Available: auto, on, off[/red]")
 
         elif cmd == "/model":
             if not arg:
@@ -213,6 +230,7 @@ class GeniusChatSession:
             table = Table(title="Genius CLI Commands", border_style="cyan")
             table.add_column("Command", style="bold yellow")
             table.add_column("Description", style="white")
+            table.add_row("/research [mode]", "Toggle research mode: 'auto' (smart), 'on' (always), 'off' (direct offline)")
             table.add_row("/model [name]", "Switch or view active LLM provider (local, claude, ollama)")
             table.add_row("/search <query>", "Execute direct Wikipedia + Web search without LLM generation")
             table.add_row("/exec <command>", "Execute shell command with Human-in-the-Loop (HITL) safety")

@@ -118,11 +118,25 @@ class XThinkingEngine:
         self.session_mgr = session_manager or SessionManager()
         self.episodic_mgr = episodic_manager or EpisodicMemoryManager()
         self.grounding_engine = grounding_engine or GroundingEngine()
+        self.research_mode: str = "auto"  # "auto", "on", "off"
 
     def set_model_provider(self, provider_name: str) -> bool:
         """Switch active LLM provider (e.g. 'local', 'claude', 'ollama')."""
         if self.router.set_provider(provider_name):
             self.model = self.router.get_provider(provider_name)
+            return True
+        return False
+
+    def set_research_mode(self, mode: str) -> bool:
+        """Sets research mode: 'auto' (smart routing), 'on' (always parallel search), 'off' (direct offline)."""
+        mode_clean = mode.lower().strip()
+        if mode_clean in ("auto", "on", "off", "always", "disabled", "direct", "offline"):
+            if mode_clean in ("always", "enable", "enabled"):
+                self.research_mode = "on"
+            elif mode_clean in ("disabled", "direct", "offline"):
+                self.research_mode = "off"
+            else:
+                self.research_mode = mode_clean
             return True
         return False
 
@@ -182,6 +196,7 @@ class XThinkingEngine:
         self,
         question: str,
         session_id: Optional[str] = None,
+        research_mode: Optional[str] = None,
         max_articles: int = 2,
         max_web_results: int = 3,
         top_k_passages: int = 5,
@@ -240,14 +255,28 @@ class XThinkingEngine:
         t_retrieval_ms = 0.0
 
         # Node 2: Router_Decision
-        if complexity_score < 0.35:
-            # Node 2a: Edge_ShortCircuit (Direct synthesis for simple greetings/identity)
+        active_mode = (research_mode or self.research_mode).lower()
+        should_retrieve = False
+        if active_mode in ("off", "disabled", "direct", "offline"):
+            should_retrieve = False
+        elif active_mode in ("on", "always", "enabled"):
+            should_retrieve = True
+        else:  # auto
+            should_retrieve = (complexity_score >= 0.35)
+
+        if not should_retrieve:
+            # Node 2a: Edge_ShortCircuit (Direct synthesis without external web/wiki search)
+            mode_desc = (
+                "⚡ Fast Direct / Offline Mode: Web/wiki search bypassed by user."
+                if active_mode in ("off", "disabled", "direct", "offline")
+                else "⚡ Edge Short-Circuit: Direct rapid conversational synthesis."
+            )
             yield ReasoningEvent(
                 stage="plan",
                 event_type="status",
-                payload={"message": "⚡ Edge Short-Circuit: Direct rapid conversational synthesis."},
+                payload={"message": mode_desc},
             )
-            formatted_context = "No external research needed for conversational greeting/identity."
+            formatted_context = "External live search is bypassed. Answer using internal foundational knowledge, exemplars, and episodic memory."
         else:
             # Node 2b: Epistemic_Retrieval
             t_retrieval_start = time.time()
