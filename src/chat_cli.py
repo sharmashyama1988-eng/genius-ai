@@ -248,11 +248,134 @@ class GeniusChatSession:
                 current = self.forced_lang or "AUTO-DETECT"
                 self.console.print(f"[dim]Current language mode: [bold]{current}[/bold][/dim]")
 
+        elif cmd in ("/project", "/workspace", "/cd"):
+            if not arg:
+                summary = self.workspace.scan_project()
+                table = Table(title="Active Project Workspace", border_style="cyan")
+                table.add_column("Property", style="bold cyan")
+                table.add_column("Value", style="bold white")
+                table.add_row("Root Path", str(self.workspace.get_workspace()))
+                table.add_row("Files Count", str(summary.get("file_count", 0)))
+                table.add_row("Folders Count", str(summary.get("dir_count", 0)))
+                table.add_row("Languages", ", ".join(summary.get("languages", [])) or "None")
+                table.add_row("Signatures", ", ".join(summary.get("signatures", [])) or "General Directory")
+                self.console.print(table)
+                self.console.print("[dim]Usage: /project <path_to_project_directory>[/dim]")
+            else:
+                ok, msg, summary = self.workspace.set_workspace(arg)
+                if ok:
+                    self.executor.default_cwd = str(self.workspace.get_workspace())
+                    self.console.print(f"[bold green]✓ Switched project workspace to:[/bold green] [bold cyan]{self.workspace.get_workspace()}[/bold cyan]")
+                    self.console.print(f"[dim]Total files: {summary.get('file_count', 0)} | Languages: {', '.join(summary.get('languages', [])) or 'None'}[/dim]")
+                else:
+                    self.console.print(f"[red]{msg}[/red]")
+
+        elif cmd in ("/files", "/ls", "/tree"):
+            ok, msg = self.workspace.list_files(arg)
+            if ok:
+                self.console.print(msg)
+            else:
+                self.console.print(f"[red]{msg}[/red]")
+
+        elif cmd == "/create":
+            if not arg:
+                self.console.print("[yellow]Usage: /create <filename> [content][/yellow]")
+            else:
+                parts = arg.split(maxsplit=1)
+                fname = parts[0]
+                content = parts[1] if len(parts) > 1 else ""
+                ok, msg = self.workspace.create_file(fname, content)
+                if ok:
+                    self.console.print(f"[bold green]✓ {msg}[/bold green]")
+                else:
+                    self.console.print(f"[red]{msg}[/red]")
+
+        elif cmd == "/read":
+            if not arg:
+                self.console.print("[yellow]Usage: /read <filename>[/yellow]")
+            else:
+                ok, msg = self.workspace.read_file(arg)
+                if ok:
+                    self.console.print(msg)
+                else:
+                    self.console.print(f"[red]{msg}[/red]")
+
+        elif cmd in ("/view", "/image"):
+            if not arg:
+                self.console.print("[yellow]Usage: /view <image_or_file_path>[/yellow]")
+            else:
+                ok, msg, meta = self.workspace.inspect_image(arg, auto_open=True)
+                if ok:
+                    self.console.print(Panel(msg, title="[bold cyan]Image Inspector[/bold cyan]", border_style="cyan"))
+                else:
+                    ok_r, msg_r = self.workspace.read_file(arg)
+                    if ok_r:
+                        self.console.print(msg_r)
+                    else:
+                        self.console.print(f"[red]{msg}[/red]")
+
+        elif cmd in ("/calc", "/math"):
+            if not arg:
+                self.console.print("[yellow]Usage: /calc <mathematical expression or equation>[/yellow]")
+            else:
+                from .reasoning.math_solver import MathSolver
+                res = MathSolver.solve(arg, lang_style=self.forced_lang or "en")
+                if res:
+                    think, resp = res
+                    clean_resp = TextSanitizer.clean_for_display(resp)
+                    if self.show_thinking:
+                        self.console.print(Panel(TextSanitizer.clean_for_display(think), title="[bold cyan]Mathematical Derivation[/bold cyan]", border_style="cyan"))
+                    self.console.print(clean_resp)
+                else:
+                    self.console.print(f"[red]Could not parse mathematical expression: '{arg}'.[/red]")
+
+        elif cmd == "/code":
+            if not arg:
+                self.console.print("[yellow]Usage: /code <problem or algorithm>[/yellow]")
+            else:
+                from .reasoning.code_solver import CodeSolver
+                res = CodeSolver.solve(arg, lang_style=self.forced_lang or "en")
+                if res:
+                    think, resp = res
+                    clean_resp = TextSanitizer.clean_for_display(resp)
+                    if self.show_thinking:
+                        self.console.print(Panel(TextSanitizer.clean_for_display(think), title="[bold cyan]Algorithmic Analysis[/bold cyan]", border_style="cyan"))
+                    self.console.print(clean_resp)
+                else:
+                    await self._process_turn(f"Write code for {arg}")
+
+        elif cmd == "/stats":
+            turns = self.engine.session_mgr.get_turns(self.session_id)
+            active_model = self.engine.router.active_provider_name
+            summary = self.workspace.scan_project()
+            table = Table(title="Genius System Telemetry & Statistics", border_style="green")
+            table.add_column("Metric", style="bold cyan")
+            table.add_column("Value", style="bold white")
+            table.add_row("Current Session ID", self.session_id)
+            table.add_row("Total Turns in Session", str(len(turns)))
+            table.add_row("Active Model Provider", active_model.upper())
+            table.add_row("Research Mode", self.engine.research_mode.upper())
+            table.add_row("Active Project Root", str(self.workspace.get_workspace()))
+            table.add_row("Project Files Count", str(summary.get("file_count", 0)))
+            table.add_row("Project Languages", ", ".join(summary.get("languages", [])) or "None")
+            table.add_row("xThinking Stream", "ENABLED" if self.show_thinking else "DISABLED")
+            table.add_row("Language Mode", self.forced_lang or "AUTO-DETECT")
+            table.add_row("Working Memory Size", f"{len(self.history)} messages")
+            self.console.print(table)
+
         elif cmd == "/help":
             table = Table(title="Genius CLI Commands", border_style="cyan")
             table.add_column("Command", style="bold yellow")
             table.add_column("Description", style="white")
-            table.add_row("/research [mode]", "Toggle research mode: 'auto' (smart), 'on' (always), 'off' (direct offline)")
+            table.add_row("/project [path]", "Shift into project directory and analyze codebase structure")
+            table.add_row("/files [subpath]", "Display clean file hierarchy and sizes in active project")
+            table.add_row("/read <file>", "Read file content (text or image) from active project")
+            table.add_row("/create <file>", "Create new file in active project with initial content")
+            table.add_row("/view <image>", "Inspect image resolution, metadata, and open in viewer")
+            table.add_row("/calc <expr>", "Directly solve math equations, series, formulas, AST")
+            table.add_row("/code <query>", "Synthesize production algorithms, data structures, templates")
+            table.add_row("/stats", "Show session telemetry, project status, and cognitive state")
+            table.add_row("/research [mode]", "Toggle research mode: 'auto', 'on', 'off'")
             table.add_row("/model [name]", "Switch or view active LLM provider (local, claude, ollama)")
             table.add_row("/search <query>", "Execute direct Wikipedia + Web search without LLM generation")
             table.add_row("/exec <command>", "Execute shell command with Human-in-the-Loop (HITL) safety")
@@ -305,6 +428,18 @@ class GeniusChatSession:
 
     async def _process_turn(self, question: str) -> None:
         """Executes a single reasoning and conversation turn."""
+        # 1. Autonomous Natural Language Workspace / File / Image Actions
+        intent_res = self.workspace.handle_natural_language_intent(question)
+        if intent_res:
+            intent_type, intent_msg = intent_res
+            if intent_type == "workspace_shift":
+                self.executor.default_cwd = str(self.workspace.get_workspace())
+            clean_msg = TextSanitizer.clean_for_display(intent_msg)
+            self.console.print()
+            self.console.print(clean_msg)
+            self.history.append({"user": question, "assistant": clean_msg})
+            return
+
         detected_info: Optional[Dict] = None
         thinking_text = ""
         response_text = ""
@@ -368,7 +503,8 @@ class GeniusChatSession:
                     elif event.event_type == "token":
                         token = event.payload.get("token", "")
                         response_text += token
-                        sys.stdout.write(token)
+                        clean_token = token.replace("$$", "").replace(r"\(", "").replace(r"\)", "")
+                        sys.stdout.write(clean_token)
                         sys.stdout.flush()
 
                 elif event.stage == "done":
