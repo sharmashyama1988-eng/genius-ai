@@ -112,18 +112,39 @@ All operating system and shell commands undergo rigorous static safety inspectio
 
 ## 🚀 Quickstart
 
-### 1. Launch Interactive CLI
+### 1. Launch Options
+
+#### A. Interactive Conversational REPL
 ```bash
 python run_genius.py
-# or double-click
+# or double-click on Windows:
 start_genius.bat
 ```
 
-### 2. Available Slash Commands
+#### B. Direct Single-Turn Query (Scriptable / Pipe-Friendly)
+```bash
+# General query with smart auto-research routing:
+python run_genius.py "Who was Alan Turing and what was his major contribution?"
+
+# Force live Wikipedia & Web search:
+python run_genius.py "Latest Mars rover discoveries" --research on
+
+# Pure fast offline edge mode (no network requests):
+python run_genius.py "Write a Python script to compute Fibonacci" --research off
+
+# Select model core (local, claude, ollama):
+python run_genius.py "Explain quantum entanglement" -m local -r auto
+
+# Suppress <think> intermediate tokens:
+python run_genius.py "Calculate quorum for 5 nodes" --no-think
+```
+
+### 2. Available Slash Commands (Interactive REPL)
 | Command | Action |
 |---|---|
-| `/think` | Toggle live extended thinking stream `<think>...</think>` |
-| `/model [local\|claude\|ollama]` | Switch active reasoning engine on the fly |
+| `/research [auto\|on\|off]` | Toggle research mode: `auto` (smart routing), `on` (always search), `off` (direct offline) |
+| `/think` | Toggle live extended thinking stream `<think>...</think>` on/off |
+| `/model [local\|claude\|ollama]` | Switch active reasoning engine core on the fly |
 | `/search <query>` | Standalone live Wikipedia + Web retrieval with BM25 ranking |
 | `/exec <command>` | Safely evaluate and execute shell actions with HITL guard |
 | `/export [md\|json]` | Export conversation transcript and cognitive trajectories |
@@ -133,6 +154,13 @@ start_genius.bat
 | `/exit` | Gracefully quit session |
 
 ---
+
+## 📚 Multi-Source Dataset & In-Context Alignment
+Genius dynamically indexes curated exemplar datasets to guide few-shot mathematical, coding, and reasoning derivations:
+- **Claude Synthetic Reasoning (26 Exemplars)**: High-fidelity multi-hop chains with explicit `<think>` hypothesis formulation, cross-examination, self-critique, and cited conclusions (`hi-Latn`, `en`, `hi`).
+- **Alpaca 52k**: General instruction-following pairs.
+- **CodeAlpaca 20k**: Algorithmic and software engineering tasks.
+- **LIMA**: Curated conversational alignment.
 
 ## 📂 Project Structure
 

@@ -3,8 +3,13 @@ title Genius: Autonomous Deep-Reasoning AI (xThinking + Wikipedia)
 cd /d "%~dp0"
 echo ========================================================
 echo   Launching Genius: Autonomous Deep-Reasoning Agent
-echo   Model: Qwen2.5-0.5B-Chat ^| Multilingual Engine
+echo   Model: Dual-Core Qwen2.5 / Edge / Claude / Ollama
 echo ========================================================
 echo.
-.\.venv\Scripts\python.exe run_genius.py
-pause
+
+if exist ".\.venv\Scripts\python.exe" (
+    .\.venv\Scripts\python.exe run_genius.py %*
+) else (
+    python run_genius.py %*
+)
+if %ERRORLEVEL% NEQ 0 pause
