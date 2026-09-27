@@ -57,7 +57,7 @@ class GeniusChatSession:
         banner.append("• Safety Guard: ", style="bold white")
         banner.append("Human-in-the-Loop (HITL) Static AST/Regex Command Guardian\n", style="red")
         banner.append("• Commands: ", style="bold white")
-        banner.append("/research, /model, /search, /exec, /export, /sessions, /think, /lang, /clear, /exit\n", style="dim")
+        banner.append("/research, /model, /calc, /code, /search, /exec, /stats, /export, /sessions, /think, /lang, /clear, /exit\n", style="dim")
 
         self.console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 

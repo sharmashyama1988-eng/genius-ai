@@ -167,6 +167,10 @@ class FoundationalEdgeProvider(BaseLLMProvider):
         from ..reasoning.math_solver import MathSolver
         math_result = MathSolver.solve(user_msg, lang_style=lang_style)
 
+        # Check if question is an algorithmic or code synthesis problem
+        from ..reasoning.code_solver import CodeSolver
+        code_result = CodeSolver.solve(user_msg, lang_style=lang_style)
+
         # Generate structured <think> sequence
         response_text = ""
         if math_result:
@@ -177,6 +181,14 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                 "</think>\n\n",
             ]
             response_text = math_resp
+        elif code_result:
+            code_think, code_resp = code_result
+            think_tokens = [
+                "<think>\n",
+                code_think + "\n",
+                "</think>\n\n",
+            ]
+            response_text = code_resp
         elif is_conversational:
             if is_status_inquiry:
                 intent_desc = "Conversational well-being / status inquiry"
@@ -205,23 +217,26 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                 f"[Latent xThinking - Deep Cognitive Trace]:\n{exemplar_think}\n",
                 "</think>\n\n",
             ]
-        else:
+        elif fact_blocks:
             think_tokens = [
                 "<think>\n",
                 f"[Query Deconstruction]: Analyzing core intent: '{user_msg}'.\n",
+                f"[Epistemic Audit]: Verified {len(fact_blocks)} factual evidence passages from external knowledge base.\n",
+                "[Cross-Examination]: Cross-referencing claims against evidence excerpts to ensure 100% precision.\n",
+                "[Harmonic Synthesis]: Formulating answer strictly bounded by factual citations [1], [2].\n",
+                "</think>\n\n",
             ]
+        else:
+            from ..reasoning.concept_synthesizer import ConceptSynthesizer
+            concept_think, concept_resp = ConceptSynthesizer.synthesize(user_msg, lang_style=lang_style)
+            think_tokens = [
+                "<think>\n",
+                concept_think + "\n",
+                "</think>\n\n",
+            ]
+            response_text = concept_resp
 
-            if fact_blocks:
-                think_tokens.append(f"[Epistemic Audit]: Verified {len(fact_blocks)} factual evidence passages from external knowledge base.\n")
-                think_tokens.append("[Cross-Examination]: Cross-referencing claims against evidence excerpts to ensure 100% precision.\n")
-                think_tokens.append("[Harmonic Synthesis]: Formulating answer strictly bounded by factual citations [1], [2].\n")
-            else:
-                think_tokens.append("[Direct Epistemic Mode]: Query resolved through foundational axioms and conversational protocol.\n")
-                think_tokens.append("[Constraint Verification]: Ensuring persona alignment as Genius, polite, rigorous, and direct.\n")
-
-            think_tokens.append("</think>\n\n")
-
-        # Synthesize final response (if not already produced by MathSolver)
+        # Synthesize final response (if not already produced by MathSolver, CodeSolver, or ConceptSynthesizer)
         if not response_text:
             if is_status_inquiry:
                 if lang_style == "hi-Latn":
@@ -306,23 +321,8 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                 response_text = exemplar_output
 
             else:
-                # General thoughtful response
-                if lang_style == "hi-Latn":
-                    response_text = (
-                        f"'{user_msg}' par maine analysis kiya hai. Yeh ek important topic hai. "
-                        "Aap isme specific technical requirements ya mathematical formulation specify karein, taaki main complete grounded breakdown de sakun."
-                    )
-                elif lang_style == "hi":
-                    response_text = (
-                        f"'{user_msg}' के विषय में मैंने गहन विश्लेषण किया है। "
-                        "कृपया अपनी विशिष्ट आवश्यकता या प्रश्न स्पष्ट करें ताकि मैं पूर्ण प्रमाणित उत्तर प्रस्तुत कर सकूँ।"
-                    )
-                else:
-                    response_text = (
-                        f"Analysis regarding '{user_msg}':\n\n"
-                        "This topic involves key foundational principles. Please specify any particular architecture, "
-                        "sub-questions, or implementation details you would like a rigorous grounded derivation for."
-                    )
+                from ..reasoning.concept_synthesizer import ConceptSynthesizer
+                _, response_text = ConceptSynthesizer.synthesize(user_msg, lang_style=lang_style)
 
         # Stream think tokens first
         for tok in think_tokens:
