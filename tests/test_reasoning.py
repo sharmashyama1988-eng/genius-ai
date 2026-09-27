@@ -80,6 +80,36 @@ class TestReasoningEngine(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Alan Turing was born in 1912", done_event.payload["thoughts"])
         self.assertGreater(len(done_event.payload["citations"]), 0)
 
+    def test_claude_reasoning_exemplar_matching(self):
+        from src.dataset.retriever import ExemplarRetriever
+        retriever = ExemplarRetriever()
+        retriever.load_index()
+        results = retriever.find_relevant_exemplars("quorum consistency distributed nodes", top_k=2)
+        self.assertGreater(len(results), 0)
+        self.assertEqual(results[0].source, "claude_reasoning")
+        self.assertIn("<think>", results[0].output)
+
+    async def test_offline_research_mode_bypass(self):
+        mock_model = MagicMock()
+
+        async def mock_stream_gen(*args, **kwargs):
+            yield "<think>\nDirect internal retrieval...</think>\nHello! I am Genius."
+
+        mock_model.stream_generate = mock_stream_gen
+        mock_wiki = MagicMock()
+        mock_wiki.search_and_fetch = AsyncMock()
+
+        engine = XThinkingEngine(model_engine=mock_model, wiki_client=mock_wiki, research_mode="off")
+        events = []
+        async for ev in engine.execute_stream("Hi, who are you?"):
+            events.append(ev)
+
+        # Wikipedia client should NOT be called in offline/direct mode
+        mock_wiki.search_and_fetch.assert_not_called()
+        stages = [e.stage for e in events]
+        self.assertNotIn("research", stages)
+        self.assertIn("response", stages)
+
 
 if __name__ == "__main__":
     unittest.main()

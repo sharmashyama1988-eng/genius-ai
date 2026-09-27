@@ -31,15 +31,34 @@ class MultilingualManager:
         self,
         detected: DetectedLanguage,
         formatted_context: str,
+        exemplars: Optional[list] = None,
     ) -> str:
         """Constructs an optimized, native-sounding system prompt tailored to the detected language."""
         profile = detected.profile
 
+        exemplar_section = ""
+        if exemplars:
+            blocks = []
+            for idx, ex in enumerate(exemplars, 1):
+                instr = getattr(ex, "instruction", "")
+                out = getattr(ex, "output", "")
+                src = getattr(ex, "source", "exemplar")
+                if instr and out:
+                    blocks.append(
+                        f"--- EXEMPLAR {idx} [{src}] ---\n"
+                        f"Query: {instr}\n"
+                        f"Demonstrated Reasoning:\n{out[:1200]}\n"
+                        f"-----------------------------"
+                    )
+            if blocks:
+                exemplar_section = "\n=== COGNITIVE REASONING EXEMPLARS ===\n" + "\n".join(blocks) + "\n=====================================\n\n"
+
         prompt = (
             f"{profile.system_instruction}\n\n"
-            f"=== VERIFIED FACTUAL KNOWLEDGE (WIKIPEDIA) ===\n"
+            f"=== VERIFIED FACTUAL KNOWLEDGE ===\n"
             f"{formatted_context}\n"
-            f"===============================================\n\n"
+            f"==================================\n\n"
+            f"{exemplar_section}"
             f"REASONING & THINKING DIRECTIVE:\n"
             f"1. You MUST first perform structured reasoning inside `<think>` and `</think>` tags.\n"
             f"   {profile.thinking_instruction}\n"

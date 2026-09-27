@@ -393,7 +393,9 @@ class XThinkingEngine:
         gamma = 1.5
         adaptive_thinking_budget = min(32000, int(b_base * (1.0 + gamma * contradiction_density)))
 
-        system_prompt = self.multilingual_mgr.get_system_prompt_for_language(detected_lang, formatted_context)
+        system_prompt = self.multilingual_mgr.get_system_prompt_for_language(
+            detected_lang, formatted_context, exemplars=exemplars
+        )
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
