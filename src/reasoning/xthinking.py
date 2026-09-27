@@ -158,7 +158,7 @@ class XThinkingEngine:
         return " ".join(filtered[:8])
 
     def _detect_category(self, query: str) -> str:
-        """Determines if query is coding, general knowledge, or conversational."""
+        """Determines if query is coding, math, general knowledge, or conversational."""
         q_lower = query.lower()
         code_indicators = [
             "code", "python", "javascript", "function", "class", "algorithm",
@@ -167,6 +167,16 @@ class XThinkingEngine:
         ]
         if any(w in q_lower for w in code_indicators):
             return "codealpaca"
+
+        math_indicators = [
+            "calculate", "solve", "speed", "distance", "km/h", "mph", "equation",
+            "probability", "integral", "derivative", "ratio", "percentage",
+            "matrix", "vector", "prime number", "hypotenuse", "sum of", "modulo",
+            "trains", "moving towards", "how many hours", "kitne time",
+        ]
+        if any(w in q_lower for w in math_indicators) or bool(re.search(r"\b\d+\s*(\+|\-|\*|\/|\^|km/h|m/s)\b", q_lower)):
+            return "math"
+
         return "general"
 
     def _compute_complexity(self, query: str) -> float:
@@ -264,15 +274,20 @@ class XThinkingEngine:
         elif active_mode in ("on", "always", "enabled"):
             should_retrieve = True
         else:  # auto
-            should_retrieve = (complexity_score >= 0.35)
+            # Pure math and analytical problems are solved directly without encyclopedia lookups
+            if category == "math" and not any(w in question.lower() for w in ["history", "who discovered", "who proved", "biography", "origin"]):
+                should_retrieve = False
+            else:
+                should_retrieve = (complexity_score >= 0.35)
 
         if not should_retrieve:
             # Node 2a: Edge_ShortCircuit (Direct synthesis without external web/wiki search)
-            mode_desc = (
-                "⚡ Fast Direct / Offline Mode: Web/wiki search bypassed by user."
-                if active_mode in ("off", "disabled", "direct", "offline")
-                else "⚡ Edge Short-Circuit: Direct rapid conversational synthesis."
-            )
+            if active_mode in ("off", "disabled", "direct", "offline"):
+                mode_desc = "⚡ Fast Direct / Offline Mode: Web/wiki search bypassed by user."
+            elif category == "math":
+                mode_desc = "⚡ Analytical Math Engine: Direct formal derivation without web noise."
+            else:
+                mode_desc = "⚡ Edge Short-Circuit: Direct rapid conversational synthesis."
             yield ReasoningEvent(
                 stage="plan",
                 event_type="status",
