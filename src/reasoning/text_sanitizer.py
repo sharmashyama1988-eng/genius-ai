@@ -35,9 +35,13 @@ class TextSanitizer:
     def clean_for_display(cls, text: str) -> str:
         """Sanitizes text removing raw markdown and LaTeX syntax, returning clean readable text."""
         if not text:
-            return ""
+        # Protect code blocks ```...``` from markdown/math sanitization
+        code_blocks: list[str] = []
+        def _save_code(m: re.Match) -> str:
+            code_blocks.append(m.group(0))
+            return f"___CODE_BLOCK_{len(code_blocks)-1}___"
 
-        res = text
+        res = re.sub(r"```[\s\S]*?```", _save_code, text)
 
         # 1. LaTeX math font wrappers: \mathbf{...}, \mathit{...}, \mathrm{...}, \text{...}
         for _ in range(3):
