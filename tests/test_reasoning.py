@@ -84,10 +84,24 @@ class TestReasoningEngine(unittest.IsolatedAsyncioTestCase):
         from src.dataset.retriever import ExemplarRetriever
         retriever = ExemplarRetriever()
         retriever.load_index()
+        # Test batch 1 item
         results = retriever.find_relevant_exemplars("quorum consistency distributed nodes", top_k=2)
         self.assertGreater(len(results), 0)
         self.assertEqual(results[0].source, "claude_reasoning")
         self.assertIn("<think>", results[0].output)
+
+        # Test batch 2 items
+        raft_res = retriever.find_relevant_exemplars("Raft cluster network partition stale leader", top_k=1)
+        self.assertGreater(len(raft_res), 0)
+        self.assertEqual(raft_res[0].source, "claude_reasoning")
+
+        bloom_res = retriever.find_relevant_exemplars("Bloom filter false positive probability derivation", top_k=1)
+        self.assertGreater(len(bloom_res), 0)
+        self.assertEqual(bloom_res[0].source, "claude_reasoning")
+
+        lru_res = retriever.find_relevant_exemplars("concurrent lock-free LRU cache in Go", top_k=1)
+        self.assertGreater(len(lru_res), 0)
+        self.assertEqual(lru_res[0].source, "claude_reasoning")
 
     async def test_offline_research_mode_bypass(self):
         mock_model = MagicMock()
