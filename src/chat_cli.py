@@ -26,6 +26,7 @@ from .reasoning.xthinking import Citation, ReasoningEvent, XThinkingEngine
 from .system.executor import ExecutionResult, SystemExecutor
 from .system.guard import ActionSafetyLevel, SafetyGuard
 from .system.workspace import WorkspaceManager
+from .system.chat_viewer import ChatViewer
 
 
 class GeniusChatSession:
@@ -34,6 +35,7 @@ class GeniusChatSession:
     def __init__(self, show_thinking: bool = True) -> None:
         self.console = Console()
         self.show_thinking = show_thinking
+        self.chat_view_mode: str = "cards"  # "cards" (visual bubbles) or "stream" (classic terminal)
         self.engine = XThinkingEngine()
         self.workspace = WorkspaceManager()
         self.executor = SystemExecutor(default_cwd=str(self.workspace.get_workspace()))
@@ -62,7 +64,7 @@ class GeniusChatSession:
         banner.append("• Safety Guard: ", style="bold white")
         banner.append("Human-in-the-Loop (HITL) Static AST/Regex Command Guardian\n", style="red")
         banner.append("• Commands: ", style="bold white")
-        banner.append("/project, /files, /read, /create, /view, /calc, /code, /search, /exec, /stats, /clear, /exit\n", style="dim")
+        banner.append("/project, /files, /read, /create, /view, /chatview, /calc, /code, /search, /exec, /stats, /clear, /exit\n", style="dim")
 
         self.console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
@@ -363,6 +365,21 @@ class GeniusChatSession:
             table.add_row("Working Memory Size", f"{len(self.history)} messages")
             self.console.print(table)
 
+        elif cmd in ("/chatview", "/viewchat", "/history"):
+            if not arg:
+                ChatViewer.render_history_thread(self.console, self.history, self.session_id)
+            elif arg.lower() in ("html", "web", "browser"):
+                path = ChatViewer.export_html_view(self.history, self.session_id)
+                self.console.print(f"[bold green]✓ Standalone visual chat view opened in browser:[/bold green] [bold cyan]{path}[/bold cyan]")
+            elif arg.lower() in ("cards", "bubble", "panel"):
+                self.chat_view_mode = "cards"
+                self.console.print("[dim]Chat view mode set to: [bold cyan]CARDS[/bold cyan] (Rounded dialogue bubbles)[/dim]")
+            elif arg.lower() in ("stream", "classic"):
+                self.chat_view_mode = "stream"
+                self.console.print("[dim]Chat view mode set to: [bold yellow]STREAM[/bold yellow] (Classic flowing terminal)[/dim]")
+            else:
+                self.console.print("[yellow]Usage: /chatview [cards|stream|html][/yellow]")
+
         elif cmd == "/help":
             table = Table(title="Genius CLI Commands", border_style="cyan")
             table.add_column("Command", style="bold yellow")
@@ -372,6 +389,7 @@ class GeniusChatSession:
             table.add_row("/read <file>", "Read file content (text or image) from active project")
             table.add_row("/create <file>", "Create new file in active project with initial content")
             table.add_row("/view <image>", "Inspect image resolution, metadata, and open in viewer")
+            table.add_row("/chatview [mode]", "Display visual chat cards, switch layout, or open HTML view")
             table.add_row("/calc <expr>", "Directly solve math equations, series, formulas, AST")
             table.add_row("/code <query>", "Synthesize production algorithms, data structures, templates")
             table.add_row("/stats", "Show session telemetry, project status, and cognitive state")
@@ -478,34 +496,40 @@ class GeniusChatSession:
 
                 elif event.stage == "thinking":
                     if event.event_type == "status":
-                        status.stop()
-                        if self.show_thinking:
-                            budget = event.payload.get("thinking_budget", 4096)
+                        budget = event.payload.get("thinking_budget", 4096)
+                        if self.show_thinking and self.chat_view_mode == "stream":
+                            status.stop()
                             self.console.print(f"[bold gold1]─── 💭 Genius Latent_xThinking (Adaptive Budget: {budget} tokens) ───[/bold gold1]")
                             is_thinking = True
                     elif event.event_type == "token":
                         token = event.payload.get("token", "")
                         thinking_text += token
-                        if self.show_thinking:
+                        if self.show_thinking and self.chat_view_mode == "stream":
                             sys.stdout.write(f"\033[93m{token}\033[0m")
                             sys.stdout.flush()
                     elif event.event_type == "complete":
-                        if is_thinking:
+                        if self.show_thinking and self.chat_view_mode == "cards" and thinking_text.strip():
+                            status.stop()
+                            budget = event.payload.get("thinking_budget", 4096)
+                            ChatViewer.render_thinking_message(self.console, thinking_text.strip(), budget)
+                        elif is_thinking:
                             sys.stdout.write("\n")
                             self.console.print("[dim]─── End of Extended Thinking ───[/dim]\n")
                             is_thinking = False
 
                 elif event.stage == "response":
                     if event.event_type == "status":
-                        lang_label = detected_info.get("name", "Multilingual") if detected_info else "Grounded"
-                        active_provider = self.engine.router.active_provider_name.upper()
-                        self.console.print(f"[bold cyan]Genius [{active_provider}] ({lang_label})[/bold cyan] [dim]❯[/dim] ")
+                        if self.chat_view_mode == "stream":
+                            lang_label = detected_info.get("name", "Multilingual") if detected_info else "Grounded"
+                            active_provider = self.engine.router.active_provider_name.upper()
+                            self.console.print(f"[bold cyan]Genius [{active_provider}] ({lang_label})[/bold cyan] [dim]❯[/dim] ")
                     elif event.event_type == "token":
                         token = event.payload.get("token", "")
                         response_text += token
-                        clean_token = token.replace("$$", "").replace(r"\(", "").replace(r"\)", "")
-                        sys.stdout.write(clean_token)
-                        sys.stdout.flush()
+                        if self.chat_view_mode == "stream":
+                            clean_token = token.replace("$$", "").replace(r"\(", "").replace(r"\)", "")
+                            sys.stdout.write(clean_token)
+                            sys.stdout.flush()
 
                 elif event.stage == "done":
                     citations_data = event.payload.get("citations", [])
@@ -516,31 +540,43 @@ class GeniusChatSession:
                         "contradiction_density": event.payload.get("contradiction_density", 0.0),
                     }
 
-        sys.stdout.write("\n\n")
+        # Render response based on chat view mode
+        lang_label = detected_info.get("name", "Multilingual") if detected_info else "Grounded"
+        active_provider = self.engine.router.active_provider_name.upper()
+        clean_final_response = TextSanitizer.clean_for_display(response_text)
 
-        # Grounding & Citations Telemetry Table (only shown when external sources were cited)
-        if citations_data:
-            s_ground = verdict_data.get("s_ground", 1.0) if verdict_data else 1.0
-            tau_crit = verdict_data.get("tau_crit", 0.62) if verdict_data else 0.62
-            action = verdict_data.get("action", "emit") if verdict_data else "emit"
-
-            table = Table(
-                title=f"Verified Epistemic Grounding (S_ground: {s_ground} | tau_crit: {tau_crit} | Action: {action.upper()})",
-                border_style="dim",
-                box=None,
+        if self.chat_view_mode == "cards":
+            ChatViewer.render_assistant_message(
+                self.console,
+                clean_final_response,
+                provider=active_provider,
+                lang=lang_label,
+                citations=citations_data,
             )
-            table.add_column("#", style="cyan", width=4)
-            table.add_column("Source", style="bold white", width=25)
-            table.add_column("Type", style="magenta", width=10)
-            table.add_column("URL", style="blue")
+        else:
+            sys.stdout.write("\n\n")
+            if citations_data:
+                s_ground = verdict_data.get("s_ground", 1.0) if verdict_data else 1.0
+                tau_crit = verdict_data.get("tau_crit", 0.62) if verdict_data else 0.62
+                action = verdict_data.get("action", "emit") if verdict_data else "emit"
 
-            for c in citations_data:
-                src_type = c.get("source_type", "wikipedia").capitalize()
-                table.add_row(str(c["index"]), c["title"], src_type, c["url"])
+                table = Table(
+                    title=f"Verified Epistemic Grounding (S_ground: {s_ground} | tau_crit: {tau_crit} | Action: {action.upper()})",
+                    border_style="dim",
+                    box=None,
+                )
+                table.add_column("#", style="cyan", width=4)
+                table.add_column("Source", style="bold white", width=25)
+                table.add_column("Type", style="magenta", width=10)
+                table.add_column("URL", style="blue")
 
-            self.console.print(table)
+                for c in citations_data:
+                    src_type = c.get("source_type", "wikipedia").capitalize()
+                    table.add_row(str(c["index"]), c["title"], src_type, c["url"])
 
-        self.history.append({"user": question, "assistant": response_text})
+                self.console.print(table)
+
+        self.history.append({"user": question, "assistant": clean_final_response})
 
 
 def main():
