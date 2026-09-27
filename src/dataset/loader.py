@@ -11,9 +11,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DatasetSource = Literal["lima", "alpaca", "codealpaca"]
+DatasetSource = Literal["lima", "alpaca", "codealpaca", "claude_reasoning", "custom"]
 
-RAW_DATASET_URLS: Dict[DatasetSource, str] = {
+RAW_DATASET_URLS: Dict[str, str] = {
     # Alpaca 52k clean instruction dataset
     "alpaca": "https://raw.githubusercontent.com/tatsu-lab/stanford_alpaca/main/alpaca_data.json",
     # CodeAlpaca 20k programming instruction dataset
@@ -47,13 +47,23 @@ class DatasetManager:
 
     def get_local_path(self, source: DatasetSource) -> Path:
         """Returns the local path for a dataset."""
+        if source == "claude_reasoning":
+            # Check for genius_claude_reasoning.jsonl or .json first
+            p_jsonl = self.storage_dir / "genius_claude_reasoning.jsonl"
+            if p_jsonl.exists():
+                return p_jsonl
+            p_json = self.storage_dir / "genius_claude_reasoning.json"
+            if p_json.exists():
+                return p_json
+            return p_jsonl
+
         ext = "jsonl" if source == "lima" else "json"
         return self.storage_dir / f"{source}.{ext}"
 
     def is_cached(self, source: DatasetSource) -> bool:
         """Checks if dataset exists locally and is not empty."""
         p = self.get_local_path(source)
-        return p.exists() and p.stat().st_size > 1024
+        return p.exists() and p.stat().st_size > 100
 
     async def download_dataset(
         self,
@@ -68,7 +78,7 @@ class DatasetManager:
 
         url = RAW_DATASET_URLS.get(source)
         if not url:
-            raise ValueError(f"Unknown dataset source: {source}")
+            raise ValueError(f"No remote URL configured for dataset source: {source}")
 
         logger.info(f"Downloading dataset '{source}' from {url}...")
         async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
@@ -93,8 +103,7 @@ class DatasetManager:
 
         items: List[DatasetItem] = []
 
-        if source == "lima":
-            # LIMA is in JSONL format: {"conversations": ["human prompt", "gpt answer", ...]}
+        if source in ("lima", "claude_reasoning", "custom") and path.suffix == ".jsonl":
             with open(path, "r", encoding="utf-8") as f:
                 for idx, line in enumerate(f):
                     if limit and len(items) >= limit:
@@ -104,28 +113,38 @@ class DatasetManager:
                         continue
                     try:
                         record = json.loads(line)
-                        convs = record.get("conversations", [])
-                        if len(convs) >= 2:
-                            human_msg = convs[0].strip()
-                            assistant_msg = convs[1].strip()
+                        instruction = record.get("instruction") or record.get("prompt") or ""
+                        output = record.get("output") or record.get("response") or ""
+                        inp = record.get("input", "")
+                        category = record.get("category", "reasoning")
+
+                        # Fallback for LIMA conversation format
+                        if not instruction and "conversations" in record:
+                            convs = record["conversations"]
+                            if len(convs) >= 2:
+                                instruction, output = convs[0].strip(), convs[1].strip()
+
+                        if instruction:
                             items.append(
                                 DatasetItem(
-                                    id=f"lima_{idx}",
-                                    source="lima",
-                                    category="conversation",
-                                    instruction=human_msg,
-                                    input="",
-                                    output=assistant_msg,
-                                    metadata={"turns": len(convs)},
+                                    id=f"{source}_{idx}",
+                                    source=source,
+                                    category=category,
+                                    instruction=instruction,
+                                    input=inp,
+                                    output=output,
+                                    metadata=record.get("metadata", {}),
                                 )
                             )
                     except json.JSONDecodeError:
                         continue
 
-        elif source in ("alpaca", "codealpaca"):
+        elif source in ("alpaca", "codealpaca", "claude_reasoning", "custom"):
             category = "coding" if source == "codealpaca" else "general_instruction"
             with open(path, "r", encoding="utf-8") as f:
                 records = json.load(f)
+                if isinstance(records, dict):
+                    records = [records]
                 for idx, record in enumerate(records):
                     if limit and len(items) >= limit:
                         break
@@ -133,11 +152,11 @@ class DatasetManager:
                         DatasetItem(
                             id=f"{source}_{idx}",
                             source=source,
-                            category=category,
+                            category=record.get("category", category),
                             instruction=record.get("instruction", "").strip(),
                             input=record.get("input", "").strip(),
                             output=record.get("output", "").strip(),
-                            metadata={},
+                            metadata=record.get("metadata", {}),
                         )
                     )
 
