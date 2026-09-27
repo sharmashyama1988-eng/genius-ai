@@ -244,85 +244,85 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                     )
 
             elif is_identity_inquiry or is_simple_greeting:
-            if lang_style == "hi-Latn":
-                response_text = (
-                    "Namaste! Main **Genius** hoon — aapka autonomous deep-reasoning AI agent. "
-                    "Mere paas dual-core architecture, live Wikipedia/web epistemic grounding, aur dynamic cognitive state graph integrated hai. "
-                    "Chahe mathematics, distributed systems, coding debugging ho ya factual research — main fully ready hoon. Aaj hum kis topic par kaam karein?"
-                )
-            elif lang_style == "hi":
-                response_text = (
-                    "नमस्ते! मैं **Genius** हूँ — आपका स्वायत्त डीप-रीज़निंग (Autonomous Deep-Reasoning) एआई। "
-                    "मेरे अंदर लाइव विकिपीडिया/वेब रिसर्च, डुअल-कोर आर्किटेक्चर और विस्तृत तार्किक विश्लेषण क्षमता मौजूद है। "
-                    "आप मुझसे कोई भी गणितीय समस्या, कोडिंग, सिस्टम डिज़ाइन या शोध संबंधी प्रश्न पूछ सकते हैं। बताइए, आज क्या शुरू करें?"
-                )
+                if lang_style == "hi-Latn":
+                    response_text = (
+                        "Namaste! Main **Genius** hoon — aapka autonomous deep-reasoning AI agent. "
+                        "Mere paas dual-core architecture, live Wikipedia/web epistemic grounding, aur dynamic cognitive state graph integrated hai. "
+                        "Chahe mathematics, distributed systems, coding debugging ho ya factual research — main fully ready hoon. Aaj hum kis topic par kaam karein?"
+                    )
+                elif lang_style == "hi":
+                    response_text = (
+                        "नमस्ते! मैं **Genius** हूँ — आपका स्वायत्त डीप-रीज़निंग (Autonomous Deep-Reasoning) एआई। "
+                        "मेरे अंदर लाइव विकिपीडिया/वेब रिसर्च, डुअल-कोर आर्किटेक्चर और विस्तृत तार्किक विश्लेषण क्षमता मौजूद है। "
+                        "आप मुझसे कोई भी गणितीय समस्या, कोडिंग, सिस्टम डिज़ाइन या शोध संबंधी प्रश्न पूछ सकते हैं। बताइए, आज क्या शुरू करें?"
+                    )
+                else:
+                    response_text = (
+                        "Hello! I am **Genius** — an autonomous deep-reasoning agent equipped with a 7-node Cognitive State Graph, "
+                        "real-time Wikipedia & Web grounding, and dual-core model routing. "
+                        "Whether you want to solve complex mathematics, analyze distributed systems, debug code, or research facts, I am ready. How can I help you today?"
+                    )
+
+            elif is_gratitude:
+                if lang_style == "hi-Latn":
+                    response_text = "Aapka bahut swagat hai! Genius hamesha aapki madad ke liye taiyar hai. Koi aur sawaal ya task ho toh batayein."
+                elif lang_style == "hi":
+                    response_text = "आपका स्वागत है! Genius सदैव आपकी सहायता के लिए तत्पर है। यदि कोई अन्य प्रश्न या कार्य हो तो अवश्य बताइए।"
+                else:
+                    response_text = "You are very welcome! Genius is always ready to assist. Feel free to ask whenever you need further analysis or help."
+
+            elif fact_blocks:
+                # Fact-grounded synthesis
+                extracted_facts = []
+                for idx, fb in enumerate(fact_blocks[:3], 1):
+                    clean_lines = [l for l in fb.splitlines() if not l.startswith("[FACT ") and not l.startswith("===") and l.strip()]
+                    if clean_lines:
+                        first_sent = clean_lines[0].split(".")[0].strip()
+                        if len(first_sent) > 20:
+                            extracted_facts.append(f"{first_sent} [{idx}].")
+
+                facts_summary = " ".join(extracted_facts) if extracted_facts else "According to verified records [1]."
+
+                if lang_style == "hi-Latn":
+                    response_text = (
+                        f"Aapke sawaal '{user_msg}' ke baare mein verified facts ke anusaar:\n\n"
+                        f"{facts_summary}\n\n"
+                        f"Yeh jaankari direct verified encyclopedia sources se validate ki gayi hai. Agar aur details chahiye toh batayein!"
+                    )
+                elif lang_style == "hi":
+                    response_text = (
+                        f"आपके प्रश्न '{user_msg}' के संदर्भ में सत्यापित तथ्य:\n\n"
+                        f"{facts_summary}\n\n"
+                        f"यह जानकारी प्रत्यक्ष सत्यापित स्रोतों से प्रमाणित है।"
+                    )
+                else:
+                    response_text = (
+                        f"Regarding '{user_msg}', based on verified factual evidence:\n\n"
+                        f"{facts_summary}\n\n"
+                        f"All statements above are grounded in verified references. Let me know if you would like to explore any related sub-topic in greater depth."
+                    )
+
+            elif exemplar_output and exemplar_matches_user:
+                response_text = exemplar_output
+
             else:
-                response_text = (
-                    "Hello! I am **Genius** — an autonomous deep-reasoning agent equipped with a 7-node Cognitive State Graph, "
-                    "real-time Wikipedia & Web grounding, and dual-core model routing. "
-                    "Whether you want to solve complex mathematics, analyze distributed systems, debug code, or research facts, I am ready. How can I help you today?"
-                )
-
-        elif is_gratitude:
-            if lang_style == "hi-Latn":
-                response_text = "Aapka bahut swagat hai! Genius hamesha aapki madad ke liye taiyar hai. Koi aur sawaal ya task ho toh batayein."
-            elif lang_style == "hi":
-                response_text = "आपका स्वागत है! Genius सदैव आपकी सहायता के लिए तत्पर है। यदि कोई अन्य प्रश्न या कार्य हो तो अवश्य बताइए।"
-            else:
-                response_text = "You are very welcome! Genius is always ready to assist. Feel free to ask whenever you need further analysis or help."
-
-        elif fact_blocks:
-            # Fact-grounded synthesis
-            extracted_facts = []
-            for idx, fb in enumerate(fact_blocks[:3], 1):
-                clean_lines = [l for l in fb.splitlines() if not l.startswith("[FACT ") and not l.startswith("===") and l.strip()]
-                if clean_lines:
-                    first_sent = clean_lines[0].split(".")[0].strip()
-                    if len(first_sent) > 20:
-                        extracted_facts.append(f"{first_sent} [{idx}].")
-
-            facts_summary = " ".join(extracted_facts) if extracted_facts else "According to verified records [1]."
-
-            if lang_style == "hi-Latn":
-                response_text = (
-                    f"Aapke sawaal '{user_msg}' ke baare mein verified facts ke anusaar:\n\n"
-                    f"{facts_summary}\n\n"
-                    f"Yeh jaankari direct verified encyclopedia sources se validate ki gayi hai. Agar aur details chahiye toh batayein!"
-                )
-            elif lang_style == "hi":
-                response_text = (
-                    f"आपके प्रश्न '{user_msg}' के संदर्भ में सत्यापित तथ्य:\n\n"
-                    f"{facts_summary}\n\n"
-                    f"यह जानकारी प्रत्यक्ष सत्यापित स्रोतों से प्रमाणित है।"
-                )
-            else:
-                response_text = (
-                    f"Regarding '{user_msg}', based on verified factual evidence:\n\n"
-                    f"{facts_summary}\n\n"
-                    f"All statements above are grounded in verified references. Let me know if you would like to explore any related sub-topic in greater depth."
-                )
-
-        elif exemplar_output and exemplar_matches_user:
-            response_text = exemplar_output
-
-        else:
-            # General thoughtful response
-            if lang_style == "hi-Latn":
-                response_text = (
-                    f"'{user_msg}' par maine analysis kiya hai. Yeh ek important topic hai. "
-                    "Aap isme specific technical requirements ya mathematical formulation specify karein, taaki main complete grounded breakdown de sakun."
-                )
-            elif lang_style == "hi":
-                response_text = (
-                    f"'{user_msg}' के विषय में मैंने गहन विश्लेषण किया है। "
-                    "कृपया अपनी विशिष्ट आवश्यकता या प्रश्न स्पष्ट करें ताकि मैं पूर्ण प्रमाणित उत्तर प्रस्तुत कर सकूँ।"
-                )
-            else:
-                response_text = (
-                    f"Analysis regarding '{user_msg}':\n\n"
-                    "This topic involves key foundational principles. Please specify any particular architecture, "
-                    "sub-questions, or implementation details you would like a rigorous grounded derivation for."
-                )
+                # General thoughtful response
+                if lang_style == "hi-Latn":
+                    response_text = (
+                        f"'{user_msg}' par maine analysis kiya hai. Yeh ek important topic hai. "
+                        "Aap isme specific technical requirements ya mathematical formulation specify karein, taaki main complete grounded breakdown de sakun."
+                    )
+                elif lang_style == "hi":
+                    response_text = (
+                        f"'{user_msg}' के विषय में मैंने गहन विश्लेषण किया है। "
+                        "कृपया अपनी विशिष्ट आवश्यकता या प्रश्न स्पष्ट करें ताकि मैं पूर्ण प्रमाणित उत्तर प्रस्तुत कर सकूँ।"
+                    )
+                else:
+                    response_text = (
+                        f"Analysis regarding '{user_msg}':\n\n"
+                        "This topic involves key foundational principles. Please specify any particular architecture, "
+                        "sub-questions, or implementation details you would like a rigorous grounded derivation for."
+                    )
 
         # Stream think tokens first
         for tok in think_tokens:

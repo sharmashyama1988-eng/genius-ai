@@ -211,8 +211,16 @@ class XThinkingEngine:
             "probability", "integral", "derivative", "ratio", "percentage",
             "matrix", "vector", "prime number", "hypotenuse", "sum of", "modulo",
             "trains", "moving towards", "how many hours", "kitne time",
+            "whole square", "whole cube", "square", "cube", "formula", "identity",
+            "expansion", "algebra", "sin", "cos", "tan", "theta",
+            "pythagor", "perimeter", "area of", "volume of", "d/dx", "differentiation",
+            "factorize", "simplify",
         ]
-        if any(w in q_lower for w in math_indicators) or bool(re.search(r"\b\d+\s*(\+|\-|\*|\/|\^|km/h|m/s)\b", q_lower)):
+        if (
+            any(w in q_lower for w in math_indicators)
+            or bool(re.search(r"\b\d+\s*(\+|\-|\*|\/|\^|km/h|m/s)\b", q_lower))
+            or bool(re.search(r"\(?[a-z]\s*[\+\-\*\/]\s*[a-z]\)?", q_lower))
+        ):
             return "math"
 
         return "general"
@@ -427,9 +435,13 @@ class XThinkingEngine:
 
             formatted_context = "\n\n".join(context_blocks) if context_blocks else "No direct external facts found."
 
-        # In-context exemplars (bypassed for conversational / greeting queries)
+        # In-context exemplars (bypassed for conversational / greeting queries, strictly bounded for math)
         if category == "conversational" or self._is_conversational(question):
             exemplars = []
+        elif category == "math":
+            exemplars = self.exemplar_retriever.find_relevant_exemplars(
+                question, category="math", top_k=1, min_score=0.20
+            )
         else:
             exemplars = self.exemplar_retriever.find_relevant_exemplars(
                 question, category=category if category == "codealpaca" else None, top_k=1
