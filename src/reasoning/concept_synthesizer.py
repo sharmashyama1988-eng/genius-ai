@@ -14,40 +14,44 @@ class ConceptSynthesizer:
     """Enterprise-grade concept synthesizer for deep architectural explanations."""
 
     @classmethod
-    def synthesize(cls, query: str, lang_style: str = "en") -> Optional[Tuple[str, str]]:
+    def synthesize(cls, query: str, lang_style: str = "en") -> Tuple[str, str]:
         """Analyzes query and synthesizes rigorous deep architectural breakdown."""
         q = query.strip().lower()
 
         # 1. Apache Kafka Architecture
         if "kafka" in q:
-            return cls._kafka_architecture(q, lang_style)
+            think, resp = cls._kafka_architecture(q, lang_style)
 
         # 2. CAP Theorem & PACELC
-        if "cap theorem" in q or "pacelc" in q:
-            return cls._cap_theorem(q, lang_style)
+        elif "cap theorem" in q or "pacelc" in q:
+            think, resp = cls._cap_theorem(q, lang_style)
 
         # 3. Redis Architecture & Data Structures
-        if "redis" in q:
-            return cls._redis_architecture(q, lang_style)
+        elif "redis" in q:
+            think, resp = cls._redis_architecture(q, lang_style)
 
         # 4. Consistent Hashing
-        if "consistent hashing" in q:
-            return cls._consistent_hashing(q, lang_style)
+        elif "consistent hashing" in q:
+            think, resp = cls._consistent_hashing(q, lang_style)
 
         # 5. Transformer & Attention Architecture
-        if "transformer" in q and ("architecture" in q or "model" in q or "attention" in q):
-            return cls._transformer_architecture(q, lang_style)
+        elif "transformer" in q and ("architecture" in q or "model" in q or "attention" in q):
+            think, resp = cls._transformer_architecture(q, lang_style)
 
         # 6. Kubernetes Architecture
-        if "kubernetes" in q or "k8s" in q:
-            return cls._kubernetes_architecture(q, lang_style)
+        elif "kubernetes" in q or "k8s" in q:
+            think, resp = cls._kubernetes_architecture(q, lang_style)
 
         # 7. DNS Resolution
-        if "dns" in q and ("work" in q or "resolution" in q or "query" in q or "hierarchy" in q):
-            return cls._dns_resolution(q, lang_style)
+        elif "dns" in q and ("work" in q or "resolution" in q or "query" in q or "hierarchy" in q):
+            think, resp = cls._dns_resolution(q, lang_style)
 
         # 8. Generative Conceptual Framework for General Topics
-        return cls._generic_conceptual_framework(query, lang_style)
+        else:
+            think, resp = cls._generic_conceptual_framework(query, lang_style)
+
+        from .text_sanitizer import TextSanitizer
+        return think, TextSanitizer.clean_for_display(resp)
 
     @classmethod
     def _kafka_architecture(cls, q: str, lang: str) -> Tuple[str, str]:

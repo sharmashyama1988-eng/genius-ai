@@ -96,50 +96,23 @@ class MathSolver:
         q_lower = q.lower()
         q_norm = re.sub(r"\s+", " ", q_lower)
 
-        # 1. Algebraic Identities & Binomial Expansions
-        res = cls._solve_algebraic_identities(q_norm, lang_style)
-        if res:
-            return res
-
-        # 2. Quadratic & Linear Equations
-        res = cls._solve_equations(q_norm, lang_style)
-        if res:
-            return res
-
-        # 3. Series & Progressions (AP, GP, Special Sums)
-        res = cls._solve_series(q_norm, lang_style)
-        if res:
-            return res
-
-        # 4. Logarithm Laws & Identities
-        res = cls._solve_logarithms(q_norm, lang_style)
-        if res:
-            return res
-
-        # 5. Trigonometry & Geometric Formulas
-        res = cls._solve_geometry_trig(q_norm, lang_style)
-        if res:
-            return res
-
-        # 6. Calculus (Derivatives & Integrals)
-        res = cls._solve_calculus(q_norm, lang_style)
-        if res:
-            return res
-
-        # 7. Statistics & Combinatorics (nPr, nCr, Bayes)
-        res = cls._solve_stats_combinatorics(q_norm, lang_style)
-        if res:
-            return res
-
-        # 8. Unit & Physical Conversions
-        res = cls._solve_unit_conversions(q_norm, lang_style)
-        if res:
-            return res
-
-        # 9. Direct Arithmetic, Physics & AST Evaluator
-        res = cls._solve_arithmetic_physics(q_norm, lang_style)
-        if res:
-            return res
+        solvers = [
+            cls._solve_algebraic_identities,
+            cls._solve_equations,
+            cls._solve_series,
+            cls._solve_logarithms,
+            cls._solve_geometry_trig,
+            cls._solve_calculus,
+            cls._solve_stats_combinatorics,
+            cls._solve_unit_conversions,
+            cls._solve_arithmetic_physics,
+        ]
+        for solver in solvers:
+            res = solver(q_norm, lang_style)
+            if res:
+                think, resp = res
+                from .text_sanitizer import TextSanitizer
+                return think, TextSanitizer.clean_for_display(resp)
 
         return None
 
