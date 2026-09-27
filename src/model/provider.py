@@ -104,7 +104,9 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                 end_ex = system_msg.find("=====================================", ex_idx + 35)
                 if ex_idx != -1 and end_ex != -1:
                     ex_section = system_msg[ex_idx:end_ex]
-                    if "Instruction:" in ex_section:
+                    if "Query:" in ex_section:
+                        exemplar_instruction = ex_section.split("Query:")[1].split("Demonstrated Reasoning:")[0].strip()
+                    elif "Instruction:" in ex_section:
                         exemplar_instruction = ex_section.split("Instruction:")[1].split("Demonstrated Reasoning:")[0].strip()
                     if "Demonstrated Reasoning:" in ex_section:
                         part = ex_section.split("Demonstrated Reasoning:")[1].split("-----------------------------")[0].strip()
