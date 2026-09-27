@@ -27,7 +27,7 @@ class ExemplarRetriever:
     def load_index(self, max_per_source: int = 500) -> None:
         """Loads and indexes items in memory for sub-millisecond retrieval."""
         self.items = []
-        for src in ["codealpaca", "lima", "alpaca"]:
+        for src in ["claude_reasoning", "codealpaca", "lima", "alpaca"]:
             if self.manager.is_cached(src):  # type: ignore
                 try:
                     loaded = self.manager.load_dataset(src, limit=max_per_source)  # type: ignore
@@ -69,6 +69,10 @@ class ExemplarRetriever:
 
             # Jaccard / Overlap score with length penalty
             score = len(intersection) / (math.sqrt(len(query_tokens) * len(item_tokens)) + 1e-5)
+            # Boost high-fidelity synthetic reasoning chains from Claude
+            if item.source == "claude_reasoning":
+                score *= 1.30
+
             scored.append((score, item))
 
         scored.sort(key=lambda x: x[0], reverse=True)
