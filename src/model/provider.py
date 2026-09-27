@@ -85,10 +85,30 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                             if line.startswith("[FACT "):
                                 if current_fact:
                                     fact_blocks.append("\n".join(current_fact))
-                                    current_fact = []
-                            current_fact.append(line)
+                                current_fact = [line]
+                            elif current_fact:
+                                current_fact.append(line)
                         if current_fact:
                             fact_blocks.append("\n".join(current_fact))
+            except Exception:
+                pass
+
+        # Extract cognitive exemplars if present
+        exemplar_think = ""
+        exemplar_output = ""
+        if "=== COGNITIVE REASONING EXEMPLARS ===" in system_msg:
+            try:
+                ex_idx = system_msg.find("=== COGNITIVE REASONING EXEMPLARS ===")
+                end_ex = system_msg.find("=====================================", ex_idx + 35)
+                if ex_idx != -1 and end_ex != -1:
+                    ex_section = system_msg[ex_idx:end_ex]
+                    if "Demonstrated Reasoning:" in ex_section:
+                        part = ex_section.split("Demonstrated Reasoning:")[1].split("-----------------------------")[0].strip()
+                        if "</think>" in part:
+                            exemplar_think = part.split("</think>")[0].replace("<think>", "").strip()
+                            exemplar_output = part.split("</think>")[1].strip()
+                        else:
+                            exemplar_output = part
             except Exception:
                 pass
 
@@ -100,20 +120,28 @@ class FoundationalEdgeProvider(BaseLLMProvider):
             lang_style = "hi"
 
         # Generate structured <think> sequence
-        think_tokens = [
-            "<think>\n",
-            f"[Query Deconstruction]: Analyzing core intent: '{user_msg}'.\n",
-        ]
-
-        if fact_blocks:
-            think_tokens.append(f"[Epistemic Audit]: Verified {len(fact_blocks)} factual evidence passages from external knowledge base.\n")
-            think_tokens.append("[Cross-Examination]: Cross-referencing claims against evidence excerpts to ensure 100% precision.\n")
-            think_tokens.append("[Harmonic Synthesis]: Formulating answer strictly bounded by factual citations [1], [2].\n")
+        if exemplar_think and not fact_blocks:
+            think_tokens = [
+                "<think>\n",
+                f"[Query Deconstruction & Intent Analysis]: '{user_msg}'\n",
+                f"[Latent xThinking - Deep Cognitive Trace]:\n{exemplar_think}\n",
+                "</think>\n\n",
+            ]
         else:
-            think_tokens.append("[Direct Epistemic Mode]: Query resolved through foundational axioms and conversational protocol.\n")
-            think_tokens.append("[Constraint Verification]: Ensuring persona alignment as Genius, polite, rigorous, and direct.\n")
+            think_tokens = [
+                "<think>\n",
+                f"[Query Deconstruction]: Analyzing core intent: '{user_msg}'.\n",
+            ]
 
-        think_tokens.append("</think>\n\n")
+            if fact_blocks:
+                think_tokens.append(f"[Epistemic Audit]: Verified {len(fact_blocks)} factual evidence passages from external knowledge base.\n")
+                think_tokens.append("[Cross-Examination]: Cross-referencing claims against evidence excerpts to ensure 100% precision.\n")
+                think_tokens.append("[Harmonic Synthesis]: Formulating answer strictly bounded by factual citations [1], [2].\n")
+            else:
+                think_tokens.append("[Direct Epistemic Mode]: Query resolved through foundational axioms and conversational protocol.\n")
+                think_tokens.append("[Constraint Verification]: Ensuring persona alignment as Genius, polite, rigorous, and direct.\n")
+
+            think_tokens.append("</think>\n\n")
 
         # Synthesize final response
         response_text = ""
@@ -170,6 +198,9 @@ class FoundationalEdgeProvider(BaseLLMProvider):
                     f"{facts_summary}\n\n"
                     f"All statements above are grounded in verified references. Let me know if you would like to explore any related sub-topic in greater depth."
                 )
+
+        elif exemplar_output:
+            response_text = exemplar_output
 
         else:
             # General thoughtful response
