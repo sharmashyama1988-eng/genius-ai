@@ -164,6 +164,7 @@ class FoundationalEdgeProvider(BaseLLMProvider):
         is_conversational = is_status_inquiry or is_identity_inquiry or is_simple_greeting or is_gratitude
 
         # Check if question is a mathematical or algebraic problem
+        from ..reasoning.math_solver import MathSolver
         math_result = MathSolver.solve(user_msg, lang_style=lang_style)
 
         # Generate structured <think> sequence
