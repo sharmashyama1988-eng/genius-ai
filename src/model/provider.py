@@ -164,8 +164,20 @@ class FoundationalEdgeProvider(BaseLLMProvider):
         is_gratitude = any(w in q_clean for w in ["thank you", "thanks", "dhanyawad", "shukriya"])
         is_conversational = is_status_inquiry or is_identity_inquiry or is_simple_greeting or is_gratitude
 
+        # Check if question is a mathematical or algebraic problem
+        math_result = MathSolver.solve(user_msg, lang_style=lang_style)
+
         # Generate structured <think> sequence
-        if is_conversational:
+        response_text = ""
+        if math_result:
+            math_think, math_resp = math_result
+            think_tokens = [
+                "<think>\n",
+                math_think + "\n",
+                "</think>\n\n",
+            ]
+            response_text = math_resp
+        elif is_conversational:
             if is_status_inquiry:
                 intent_desc = "Conversational well-being / status inquiry"
                 action_desc = "Respond warmly with Genius operational status, expressing full readiness to assist."
@@ -209,30 +221,29 @@ class FoundationalEdgeProvider(BaseLLMProvider):
 
             think_tokens.append("</think>\n\n")
 
-        # Synthesize final response
-        response_text = ""
+        # Synthesize final response (if not already produced by MathSolver)
+        if not response_text:
+            if is_status_inquiry:
+                if lang_style == "hi-Latn":
+                    response_text = (
+                        "Main bilkul badhiya hoon, shukriya! Main **Genius** hoon — aapka autonomous deep-reasoning AI agent. "
+                        "Mere saare cognitive reasoning pipelines aur epistemic grounding engines smoothly run kar rahe hain. "
+                        "Chahe mathematics, distributed systems, code debugging ho ya factual research — main ready hoon. Aaj hum kis topic par kaam karein?"
+                    )
+                elif lang_style == "hi":
+                    response_text = (
+                        "मैं बिल्कुल ठीक हूँ, पूछने के लिए धन्यवाद! मैं **Genius** हूँ — आपका स्वायत्त डीप-रीज़निंग एआई। "
+                        "मेरे सभी कॉग्निटिव इंजन और रीज़निंग पाइपलाइन सुचारू रूप से कार्य कर रहे हैं। "
+                        "गणित, सिस्टम डिज़ाइन, कोडिंग या शोध में आपकी सहायता के लिए तैयार हूँ। बताइए, आज क्या करना है?"
+                    )
+                else:
+                    response_text = (
+                        "I am doing great, thank you! I am **Genius** — an autonomous deep-reasoning AI agent. "
+                        "All cognitive reasoning pipelines and epistemic grounding engines are fully operational and ready. "
+                        "Whether you want to solve complex mathematics, analyze distributed systems, debug code, or research facts, I am here to help. How can I assist you today?"
+                    )
 
-        if is_status_inquiry:
-            if lang_style == "hi-Latn":
-                response_text = (
-                    "Main bilkul badhiya hoon, shukriya! Main **Genius** hoon — aapka autonomous deep-reasoning AI agent. "
-                    "Mere saare cognitive reasoning pipelines aur epistemic grounding engines smoothly run kar rahe hain. "
-                    "Chahe mathematics, distributed systems, code debugging ho ya factual research — main ready hoon. Aaj hum kis topic par kaam karein?"
-                )
-            elif lang_style == "hi":
-                response_text = (
-                    "मैं बिल्कुल ठीक हूँ, पूछने के लिए धन्यवाद! मैं **Genius** हूँ — आपका स्वायत्त डीप-रीज़निंग एआई। "
-                    "मेरे सभी कॉग्निटिव इंजन और रीज़निंग पाइपलाइन सुचारू रूप से कार्य कर रहे हैं। "
-                    "गणित, सिस्टम डिज़ाइन, कोडिंग या शोध में आपकी सहायता के लिए तैयार हूँ। बताइए, आज क्या करना है?"
-                )
-            else:
-                response_text = (
-                    "I am doing great, thank you! I am **Genius** — an autonomous deep-reasoning AI agent. "
-                    "All cognitive reasoning pipelines and epistemic grounding engines are fully operational and ready. "
-                    "Whether you want to solve complex mathematics, analyze distributed systems, debug code, or research facts, I am here to help. How can I assist you today?"
-                )
-
-        elif is_identity_inquiry or is_simple_greeting:
+            elif is_identity_inquiry or is_simple_greeting:
             if lang_style == "hi-Latn":
                 response_text = (
                     "Namaste! Main **Genius** hoon — aapka autonomous deep-reasoning AI agent. "
