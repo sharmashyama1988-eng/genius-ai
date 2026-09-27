@@ -1,7 +1,16 @@
 """
-Interactive Conversational Terminal for Genius.
-Autonomous Deep-Reasoning Agent with Neural Cognitive Schema v1.0,
-Wikipedia & Web Grounding, Dual-Core Model Routing, and HITL Safety Guard.
+Genius AI — Claude Code-level Autonomous Agent Terminal.
+
+Capabilities (v2.0):
+  ✓ Full codebase understanding & symbol navigation
+  ✓ Autonomous agentic loop (create/edit/run/fix files)
+  ✓ Git operations (commit, branch, PR, merge conflicts)
+  ✓ Dynamic infinite context window (beyond Gemini 1M)
+  ✓ protocol.txt command registry (/run test, /run build, etc.)
+  ✓ Perplexity-style search with inline citations
+  ✓ Self-healing execution (auto-fixes errors in loop)
+  ✓ Safety gates for destructive operations
+  ✓ Pipe mode: echo "task" | python -m src.chat_cli -p
 """
 
 from __future__ import annotations
@@ -11,6 +20,7 @@ import os
 import sys
 import time
 from typing import Dict, List, Optional
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -19,23 +29,28 @@ from rich.table import Table
 from rich.text import Text
 
 from .languages.router import DetectedLanguage
+from .memory.context_manager import DynamicContextWindow, create_context_window, WINDOW_PRESETS
 from .model.provider import UniversalModelRouter
 from .reasoning.schema import GroundingVerdict
 from .reasoning.text_sanitizer import TextSanitizer
 from .reasoning.xthinking import Citation, ReasoningEvent, XThinkingEngine
+from .system.agent_loop import AgentLoop
+from .system.codebase_indexer import CodebaseIndexer, ProtocolRegistry
 from .system.executor import ExecutionResult, SystemExecutor
+from .system.git_ops import GitOps
 from .system.guard import ActionSafetyLevel, SafetyGuard
+from .system.tools import ToolExecutor
 from .system.workspace import WorkspaceManager
 from .system.chat_viewer import ChatViewer
 
 
 class GeniusChatSession:
-    """Multi-turn interactive conversation session for Genius in the CLI."""
+    """Multi-turn interactive conversation session for Genius — Claude Code-level capabilities."""
 
-    def __init__(self, show_thinking: bool = True) -> None:
+    def __init__(self, show_thinking: bool = True, context_preset: str = "medium") -> None:
         self.console = Console()
         self.show_thinking = show_thinking
-        self.chat_view_mode: str = "cards"  # "cards" (visual bubbles) or "stream" (classic terminal)
+        self.chat_view_mode: str = "cards"
         self.engine = XThinkingEngine()
         self.workspace = WorkspaceManager()
         self.executor = SystemExecutor(default_cwd=str(self.workspace.get_workspace()))
@@ -43,28 +58,62 @@ class GeniusChatSession:
         self.history: List[Dict[str, str]] = []
         self.forced_lang: Optional[str] = None
 
+        # ── New: Agentic Systems ──────────────────────────────────────────
+        ws = str(self.workspace.get_workspace())
+        self.git = GitOps(ws)
+        self.indexer = CodebaseIndexer(ws)
+        self.protocol = ProtocolRegistry(ws)
+        self.tool_executor = ToolExecutor(ws)
+        self.ctx_window = create_context_window(
+            preset=context_preset,
+            session_id=self.session_id,
+        )
+        self._agent_running = False
+
+    def _refresh_workspace_systems(self) -> None:
+        """Called after /project changes workspace — update all systems."""
+        ws = str(self.workspace.get_workspace())
+        self.git = GitOps(ws)
+        self.indexer = CodebaseIndexer(ws)
+        self.protocol = ProtocolRegistry(ws)
+        self.tool_executor = ToolExecutor(ws)
+        self.executor.default_cwd = ws
+
     def print_welcome(self) -> None:
-        """Displays welcome banner and system diagnostics."""
+        """Displays welcome banner with all capabilities."""
         active_model = self.engine.router.active_provider_name
+        ws = str(self.workspace.get_workspace())
+        ctx_budget = f"{self.ctx_window.active_token_budget // 1000}K"
 
         banner = Text()
-        banner.append("⚡ GENIUS : AUTONOMOUS DEEP RESEARCHER & REASONING AI\n", style="bold cyan")
-        banner.append("• Model Core: ", style="bold white")
-        banner.append(f"{active_model.upper()} (Qwen2.5-0.5B-Instruct edge default)\n", style="green")
-        banner.append("• Active Project: ", style="bold white")
-        banner.append(f"{self.workspace.get_workspace()}\n", style="bold green")
-        banner.append("• Research Mode: ", style="bold white")
-        banner.append(f"{self.engine.research_mode.upper()} (auto / on / off toggleable)\n", style="cyan")
-        banner.append("• Neural Schema: ", style="bold white")
-        banner.append("v1.0 (ROUGE-L + Cosine Grounding Gate, Dynamic tau_crit)\n", style="bright_magenta")
-        banner.append("• Memory Topology: ", style="bold white")
-        banner.append("Dual-Memory (In-Context Sliding Window + SQLite FTS5 Episodic Vector Store)\n", style="yellow")
-        banner.append("• Factual Grounding: ", style="bold white")
-        banner.append("Wikipedia Live Research + DuckDuckGo + Multi-Hop BM25 Ranker\n", style="magenta")
-        banner.append("• Safety Guard: ", style="bold white")
-        banner.append("Human-in-the-Loop (HITL) Static AST/Regex Command Guardian\n", style="red")
-        banner.append("• Commands: ", style="bold white")
-        banner.append("/project, /files, /read, /create, /view, /chatview, /calc, /code, /search, /exec, /stats, /clear, /exit\n", style="dim")
+        banner.append("⚡ GENIUS AI  —  Claude Code-Level Autonomous Agent\n", style="bold cyan")
+        banner.append("─" * 54 + "\n", style="dim")
+        banner.append("Model      : ", style="bold white")
+        banner.append(f"{active_model.upper()}\n", style="green")
+        banner.append("Workspace  : ", style="bold white")
+        banner.append(f"{ws}\n", style="bold yellow")
+        banner.append("Context    : ", style="bold white")
+        banner.append(f"Dynamic {ctx_budget} active + UNLIMITED archive\n", style="cyan")
+        banner.append("Reasoning  : ", style="bold white")
+        banner.append("7-node Cognitive Graph + ROUGE-L Grounding\n", style="bright_magenta")
+        banner.append("Memory     : ", style="bold white")
+        banner.append("L1 Active + L2 Archive + L3 Episodic (SQLite FTS5)\n", style="yellow")
+        banner.append("Research   : ", style="bold white")
+        banner.append(f"Wikipedia + DuckDuckGo + BM25 | Mode: {self.engine.research_mode.upper()}\n", style="magenta")
+        banner.append("Git        : ", style="bold white")
+        git_status = "✓ Repo detected" if self.git.is_git_repo() else "No repo (/git init)"
+        banner.append(f"{git_status}\n", style="green" if self.git.is_git_repo() else "dim")
+        banner.append("Protocol   : ", style="bold white")
+        proto_cmds = list(self.protocol.commands.keys())
+        banner.append(f"{', '.join(proto_cmds[:6]) or 'No protocol.txt found'}\n", style="cyan" if proto_cmds else "dim")
+        banner.append("─" * 54 + "\n", style="dim")
+        banner.append("Commands   : ", style="bold white")
+        banner.append(
+            "/agent, /run, /git, /search, /files, /read, /create,\n"
+            "             /edit, /exec, /project, /context, /index,\n"
+            "             /model, /research, /think, /export, /clear, /exit\n",
+            style="dim"
+        )
 
         self.console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
@@ -151,56 +200,157 @@ class GeniusChatSession:
 
         elif cmd == "/model":
             if not arg:
-                active = self.engine.router.active_provider_name
-                table = Table(title="Available LLM Providers", box=None)
-                table.add_column("Provider", style="bold cyan")
-                table.add_column("Status", style="green")
-                table.add_column("Active", style="yellow")
+                # Show all providers with context window sizes
+                table = Table(title="LLM Providers — Context Windows", box=None, border_style="cyan")
+                table.add_column("Provider", style="bold cyan", width=14)
+                table.add_column("Context Window", style="green", width=16)
+                table.add_column("Status", style="yellow", width=22)
+                table.add_column("Active", style="bold white", width=8)
 
-                for p_name in ["local", "claude", "ollama"]:
-                    is_active = "✓ ACTIVE" if p_name == active else ""
-                    status = "Available"
-                    if p_name == "claude" and not os.getenv("ANTHROPIC_API_KEY"):
-                        status = "Requires ANTHROPIC_API_KEY"
-                    table.add_row(p_name, status, is_active)
+                provider_list = self.engine.router.list_providers()
+                for p in provider_list:
+                    ctx_k = f"{p['context_window'] // 1000}K tokens"
+                    status = "✓ Ready" if p["ready"] else "⚠ API key needed"
+                    active_mark = "★ ACTIVE" if p["active"] else ""
+                    table.add_row(p["name"], ctx_k, status, active_mark)
 
                 self.console.print(table)
-                self.console.print("[dim]Usage: /model [local|claude|ollama][/dim]")
+                self.console.print()
+
+                # Show local model sizes available
+                from .model.llm_engine import MODEL_REGISTRY
+                self.console.print("[bold cyan]Local Qwen2.5 Model Sizes:[/bold cyan]")
+                size_table = Table(box=None)
+                size_table.add_column("Alias", style="cyan", width=18)
+                size_table.add_column("Context", style="green", width=10)
+                size_table.add_column("RAM Needed", style="yellow", width=12)
+                size_table.add_column("Description", style="dim")
+                for alias, info in MODEL_REGISTRY.items():
+                    ctx_k = f"{info['extended_ctx'] // 1024}K"
+                    ram = f"{info['min_ram_gb']}GB+"
+                    size_table.add_row(alias, ctx_k, ram, info["description"])
+                self.console.print(size_table)
+                self.console.print("[dim]Usage: /model local:qwen-7b  |  /model claude  |  /model gemini[/dim]")
             else:
-                target = arg.lower()
-                if self.engine.set_model_provider(target):
-                    self.console.print(f"[green]✓ Switched active model provider to: [bold]{target.upper()}[/bold][/green]")
+                target = arg.lower().strip()
+                # Handle "local:qwen-7b" format for local model switching
+                if target.startswith("local:"):
+                    size = target.split(":", 1)[1]
+                    prov = self.engine.router.providers.get("local")
+                    if hasattr(prov, "switch_model"):
+                        prov.switch_model(size)
+                        ctx = prov.context_window
+                        self.console.print(f"[green]✓ Local model switched to [bold]{size}[/bold] | Context: {ctx // 1000}K tokens[/green]")
+                        self.console.print(f"[dim]Model will load on next query. RAM needed: check /model[/dim]")
+                    else:
+                        self.console.print("[red]Could not switch local model.[/red]")
+                elif self.engine.set_model_provider(target):
+                    ctx = self.engine.router.context_window_size()
+                    self.console.print(f"[green]✓ Provider: [bold]{target.upper()}[/bold] | Context: {ctx // 1000}K tokens[/green]")
                 else:
-                    self.console.print(f"[red]Unknown provider '{target}'. Available: local, claude, ollama[/red]")
+                    self.console.print(f"[red]Unknown provider '{target}'. Try: local, local:qwen-7b, claude, gemini, ollama[/red]")
+
+        elif cmd == "/context":
+            # Dynamic context window management
+            from .memory.context_manager import WINDOW_PRESETS
+            if not arg:
+                stats = self.ctx_window.get_stats()
+                self.console.print(stats.display())
+                self.console.print()
+                self.console.print("[bold cyan]Context Window Presets:[/bold cyan]")
+                for name, tokens in WINDOW_PRESETS.items():
+                    mark = " ← current" if tokens == self.ctx_window.active_token_budget else ""
+                    label = f"{tokens // 1000}K" if tokens < 1_000_000 else f"{tokens // 1_000_000}M"
+                    self.console.print(f"  [cyan]{name:<10}[/cyan] {label} tokens{mark}")
+                self.console.print("[dim]Usage: /context <preset>   e.g. /context gemini  /context ultra  /context infinite[/dim]")
+            else:
+                preset = arg.strip().lower()
+                if preset in WINDOW_PRESETS:
+                    self.ctx_window.set_budget(WINDOW_PRESETS[preset])
+                    new_k = self.ctx_window.active_token_budget // 1000
+                    self.console.print(f"[green]✓ Context window set to: [bold]{preset}[/bold] ({new_k}K active tokens + unlimited archive)[/green]")
+                else:
+                    try:
+                        tokens = int(preset.replace("k", "000").replace("K", "000").replace("m", "000000").replace("M", "000000"))
+                        self.ctx_window.set_budget(tokens)
+                        self.console.print(f"[green]✓ Context window set to: {tokens // 1000}K tokens[/green]")
+                    except ValueError:
+                        self.console.print(f"[red]Unknown preset '{preset}'. Try: small, medium, large, xl, gemini, ultra, infinite[/red]")
+
+        elif cmd == "/agent":
+            # Autonomous agentic task execution
+            if not arg:
+                self.console.print("[yellow]Usage: /agent <task description>[/yellow]")
+                self.console.print("[dim]Examples:[/dim]")
+                self.console.print("  [cyan]/agent create a snake game in Python using pygame[/cyan]")
+                self.console.print("  [cyan]/agent add unit tests for all functions in main.py[/cyan]")
+                self.console.print("  [cyan]/agent refactor the database module to use async/await[/cyan]")
+            else:
+                await self._run_agent(arg)
+
+        elif cmd == "/git":
+            await self._handle_git_command(arg)
+
+        elif cmd == "/run":
+            # Execute protocol.txt registered command
+            if not arg:
+                self.console.print(self.protocol.list_all())
+            else:
+                cmd_name = arg.strip().lower()
+                proto_cmd = self.protocol.get_command(cmd_name)
+                if proto_cmd:
+                    self.console.print(f"[bold cyan]Running protocol:[/bold cyan] [bold white]{cmd_name}[/bold white]")
+                    self.console.print(f"[dim]Command: {proto_cmd}[/dim]")
+                    result = self.tool_executor.run_command(proto_cmd)
+                    if result.success:
+                        self.console.print(f"[green]✓ Exit 0[/green]")
+                        if result.output:
+                            self.console.print(Panel(result.output.strip(), border_style="green", title=f"[green]{cmd_name}[/green]"))
+                    else:
+                        self.console.print(f"[red]✗ Failed[/red]")
+                        if result.output:
+                            self.console.print(Panel(result.output.strip() + "\n" + result.error, border_style="red", title=f"[red]{cmd_name} — error[/red]"))
+                else:
+                    self.console.print(f"[red]No protocol command '{cmd_name}'.[/red]")
+                    self.console.print(self.protocol.list_all())
+
+        elif cmd == "/index":
+            # Codebase symbol indexing
+            self.console.print("[bold cyan]Indexing codebase...[/bold cyan]")
+            with self.console.status("[dim]Building symbol map...", spinner="dots"):
+                idx = self.indexer.build_index()
+            self.console.print(f"[green]✓ Indexed {idx.total_files} files | {idx.total_lines} lines | {len(idx.symbol_map)} symbols[/green]")
+            if arg:
+                # Symbol search
+                results = idx.find_symbol(arg)
+                if results:
+                    tbl = Table(title=f"Symbol: '{arg}'", box=None)
+                    tbl.add_column("Name", style="cyan")
+                    tbl.add_column("Kind", style="yellow")
+                    tbl.add_column("File", style="dim")
+                    tbl.add_column("Line", style="white")
+                    for s in results[:20]:
+                        import os as _os
+                        rel = _os.path.relpath(s.file, str(self.workspace.get_workspace()))
+                        tbl.add_row(s.name, s.kind, rel, str(s.line))
+                    self.console.print(tbl)
+                else:
+                    self.console.print(f"[dim]No symbol matching '{arg}' found.[/dim]")
+            else:
+                self.console.print(idx.summary_for_agent())
 
         elif cmd == "/search":
             if not arg:
                 self.console.print("[yellow]Usage: /search <query>[/yellow]")
             else:
-                self.console.print(f"[dim]Executing live multi-hop research for: '{arg}'...[/dim]")
-                wiki_task = self.engine.wiki.search_and_fetch(arg, max_articles=2)
-                web_task = self.engine.web.search(arg, limit=3)
-                wiki_res, web_res = await asyncio.gather(wiki_task, web_task, return_exceptions=True)
+                await self._perplexity_search(arg)
 
-                table = Table(title=f"Search Results: '{arg}'", border_style="cyan")
-                table.add_column("Source", style="bold white", width=25)
-                table.add_column("Type", style="magenta", width=12)
-                table.add_column("URL / Snippet", style="dim")
-
-                if isinstance(wiki_res, list):
-                    for a in wiki_res:
-                        table.add_row(a.title, "Wikipedia", a.url)
-                if isinstance(web_res, list):
-                    for w in web_res:
-                        table.add_row(w.title[:25], "Web", w.url)
-
-                self.console.print(table)
-
-        elif cmd in ("/exec", "/run"):
+        elif cmd in ("/exec",):
             if not arg:
-                self.console.print("[yellow]Usage: /exec <powershell command>[/yellow]")
+                self.console.print("[yellow]Usage: /exec <shell command>[/yellow]")
             else:
                 await self._handle_system_exec(arg)
+
 
         elif cmd == "/export":
             export_format = arg.lower() if arg else "md"
@@ -411,6 +561,178 @@ class GeniusChatSession:
 
         return None
 
+    # ── Agentic Task Runner ────────────────────────────────────────────────────
+
+    async def _run_agent(self, task: str) -> None:
+        """
+        Runs the full autonomous agent loop for the given task.
+        Streams progress in real-time, shows files created, commands run.
+        """
+        if self._agent_running:
+            self.console.print("[yellow]⚠ Agent is already running. Wait for it to finish.[/yellow]")
+            return
+
+        self._agent_running = True
+        ws = str(self.workspace.get_workspace())
+        provider = self.engine.router.get_provider()
+
+        self.console.print(Panel(
+            f"[bold cyan]Task:[/bold cyan] {task}\n"
+            f"[bold cyan]Workspace:[/bold cyan] {ws}\n"
+            f"[dim]Type Ctrl+C to cancel[/dim]",
+            title="[bold green]⚡ GENIUS AGENT MODE[/bold green]",
+            border_style="green",
+        ))
+
+        step_log: list = []
+
+        async def on_message(msg: str) -> None:
+            self.console.print(f"[dim cyan]  {msg}[/dim cyan]")
+
+        async def on_step(step) -> None:
+            icon = "✓" if step.result.success else "✗"
+            color = "green" if step.result.success else "red"
+            step_log.append({
+                "tool": step.tool_call.name,
+                "success": step.result.success,
+                "ms": step.result.elapsed_ms,
+            })
+            self.console.print(
+                f"  [{color}]{icon}[/{color}] [cyan]{step.tool_call.name}[/cyan] "
+                f"[dim]({step.result.elapsed_ms:.0f}ms)[/dim]"
+            )
+            if not step.result.success and step.result.error:
+                self.console.print(f"    [red dim]{step.result.error[:120]}[/red dim]")
+
+        async def on_confirm(prompt: str) -> bool:
+            self.console.print(f"\n[bold yellow]⚠ Agent Safety Gate:[/bold yellow] {prompt}")
+            response = input("  Allow? [y/N]: ").strip().lower()
+            return response in ("y", "yes")
+
+        agent = AgentLoop(
+            model_provider=provider,
+            workspace_root=ws,
+            confirm_destructive=True,
+            enable_hooks=True,
+            on_step=on_step,
+            on_message=on_message,
+            on_confirm=on_confirm,
+        )
+
+        try:
+            result = await agent.run(task)
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow]Agent cancelled by user.[/yellow]")
+            self._agent_running = False
+            return
+        except Exception as e:
+            self.console.print(f"\n[red]Agent error: {e}[/red]")
+            self._agent_running = False
+            return
+
+        self._agent_running = False
+
+        # Summary panel
+        color = "green" if result.success else "yellow"
+        summary_lines = [
+            f"[bold]Status:[/bold]  {'✓ Completed' if result.success else '⚠ Partial'}",
+            f"[bold]Time:[/bold]    {result.total_time_sec:.1f}s | {result.iterations_used} steps",
+        ]
+        if result.files_created:
+            summary_lines.append(f"[bold]Created:[/bold] {', '.join(result.files_created[:5])}")
+        if result.files_modified:
+            summary_lines.append(f"[bold]Edited:[/bold]  {', '.join(result.files_modified[:5])}")
+        if result.commands_run:
+            summary_lines.append(f"[bold]Ran:[/bold]     {', '.join(result.commands_run[:3])}")
+        if result.errors_healed:
+            summary_lines.append(f"[bold]Self-healed:[/bold] {result.errors_healed} error(s) automatically")
+        summary_lines.append(f"\n{result.final_summary}")
+
+        self.console.print(Panel(
+            "\n".join(summary_lines),
+            title=f"[bold {color}]Agent Complete[/bold {color}]",
+            border_style=color,
+        ))
+
+    # ── Git Command Handler ────────────────────────────────────────────────────
+
+    async def _handle_git_command(self, arg: str) -> None:
+        """Full git operations via /git command."""
+        if not self.git.is_git_repo():
+            self.console.print("[yellow]Not a git repo. Run /git init to initialize.[/yellow]")
+            if arg == "init":
+                ok, msg = self.git.init()
+                self.console.print(f"{'[green]' if ok else '[red]'}{msg}")
+            return
+
+        parts = arg.strip().split(maxsplit=1)
+        sub = parts[0].lower() if parts else ""
+        sub_arg = parts[1] if len(parts) > 1 else ""
+
+        if not sub or sub == "status":
+            self.console.print(self.git.full_status_report())
+
+        elif sub == "commit":
+            msg = sub_arg or f"feat: update by Genius AI [{time.strftime('%Y-%m-%d %H:%M')}]"
+            ok, out = self.git.auto_commit(msg)
+            self.console.print(f"{'[green]✓[/green]' if ok else '[red]✗[/red]'} {out}")
+
+        elif sub == "push":
+            ok, out = self.git.push(set_upstream=True)
+            self.console.print(f"{'[green]✓[/green]' if ok else '[red]✗[/red]'} {out}")
+
+        elif sub == "pull":
+            ok, out = self.git.pull()
+            self.console.print(f"{'[green]✓[/green]' if ok else '[red]✗[/red]'} {out}")
+
+        elif sub == "branch":
+            if sub_arg:
+                ok, out = self.git.create_branch(sub_arg)
+                self.console.print(f"{'[green]✓ Created branch:[/green]' if ok else '[red]✗[/red]'} [cyan]{sub_arg}[/cyan]  {out}")
+            else:
+                self.console.print(self.git.list_branches())
+
+        elif sub == "log":
+            n = int(sub_arg) if sub_arg.isdigit() else 10
+            self.console.print(self.git.log(n=n))
+
+        elif sub == "diff":
+            self.console.print(self.git.diff(staged=(sub_arg == "--cached")))
+
+        elif sub == "pr":
+            base = sub_arg or "main"
+            summary = self.git.generate_pr_summary(base)
+            self.console.print(Panel(summary, title="[cyan]Pull Request Summary[/cyan]", border_style="cyan"))
+
+        elif sub == "conflicts":
+            conflicts = self.git.get_conflicts()
+            if not conflicts:
+                self.console.print("[green]No merge conflicts detected.[/green]")
+            else:
+                for fname, content in conflicts.items():
+                    self.console.print(Panel(content[:800], title=f"[red]Conflict: {fname}[/red]", border_style="red"))
+
+        elif sub == "init":
+            ok, out = self.git.init()
+            self.console.print(f"{'[green]✓[/green]' if ok else '[red]✗[/red]'} {out}")
+            if ok:
+                self._refresh_workspace_systems()
+
+        else:
+            self.console.print(
+                "[bold cyan]Git Commands:[/bold cyan]\n"
+                "  /git status            — Working tree status\n"
+                "  /git commit [message]  — Stage all + commit\n"
+                "  /git push              — Push to origin\n"
+                "  /git pull              — Pull from origin\n"
+                "  /git branch [name]     — List branches or create new\n"
+                "  /git log [n]           — Show last N commits\n"
+                "  /git diff              — Show unstaged diff\n"
+                "  /git pr [base]         — Generate PR summary\n"
+                "  /git conflicts         — Show merge conflicts\n"
+                "  /git init              — Initialize git repo\n"
+            )
+
     async def _handle_system_exec(self, command: str) -> None:
         """Handles system command execution with HITL safety protocol."""
         level, reason = SafetyGuard.evaluate_command(command)
@@ -443,6 +765,119 @@ class GeniusChatSession:
             self.console.print(f"[bold red]Execution Failed:[/bold red] {res.message}")
             if res.stderr:
                 self.console.print(f"[red]{res.stderr}[/red]")
+
+    # ─── Perplexity-Style Search: Written answer + inline [1][2] + Sources ───
+    async def _perplexity_search(self, query: str) -> None:
+        """Perplexity-style: Wikipedia + Web fetch → synthesized written answer
+        with inline [1][2] citations → clean Sources section below."""
+        import re as _re
+
+        self.console.print()
+        with self.console.status(f"[bold cyan]Searching: '{query}'...", spinner="dots"):
+            wiki_task = self.engine.wiki.search_and_fetch(query, max_articles=3)
+            web_task = self.engine.web.search(query, limit=5)
+            wiki_res, web_res = await asyncio.gather(wiki_task, web_task, return_exceptions=True)
+
+        articles = wiki_res if isinstance(wiki_res, list) else []
+        web_items = web_res if isinstance(web_res, list) else []
+
+        if not articles and not web_items:
+            self.console.print("[red]No results found. Try rephrasing the query.[/red]")
+            return
+
+        # Build numbered source list + context blocks for LLM
+        sources: List[Dict] = []
+        context_parts: List[str] = []
+        idx = 1
+        for a in articles:
+            snippet = (a.summary or getattr(a, "full_text", "")[:600])[:600]
+            sources.append({"index": idx, "title": a.title, "url": a.url, "type": "Wikipedia", "snippet": snippet})
+            context_parts.append(f"[{idx}] {a.title}:\n{snippet}")
+            idx += 1
+        for w in web_items:
+            if w.snippet and len(w.snippet) > 20:
+                sources.append({"index": idx, "title": w.title, "url": w.url, "type": "Web", "snippet": w.snippet})
+                context_parts.append(f"[{idx}] {w.title}:\n{w.snippet}")
+                idx += 1
+
+        # Language detection
+        detected = self.engine.multilingual_mgr.route_query(query)
+        lang_style = "hi-Latn" if detected.code == "hi-Latn" else ("hi" if detected.code == "hi" else "en")
+
+        context_block = "\n\n".join(context_parts[:6])
+        if lang_style == "hi-Latn":
+            synthesis_prompt = (
+                f"Neeche diye sources ke basis par '{query}' ka clear jawab likho. "
+                f"Har fact ke baad [1], [2] jaise citation lagao. Sirf plain text, koi markdown nahi. 4-6 sentences.\n\n"
+                f"Sources:\n{context_block}"
+            )
+        elif lang_style == "hi":
+            synthesis_prompt = (
+                f"नीचे दिए स्रोतों के आधार पर '{query}' का स्पष्ट उत्तर लिखें। "
+                f"हर तथ्य के बाद [1], [2] जैसे citation लगाएं। Plain text में 4-6 sentences।\n\n"
+                f"Sources:\n{context_block}"
+            )
+        else:
+            synthesis_prompt = (
+                f"Using the sources below, write a clear answer for: '{query}'. "
+                f"Add inline citations [1], [2] after each fact. Plain text only, no markdown. 4-6 sentences.\n\n"
+                f"Sources:\n{context_block}"
+            )
+
+        messages = [
+            {"role": "system", "content": (
+                "You are Genius AI. Write plain text answers with inline [n] citations after each fact. "
+                "No markdown, no bold, no headers. Natural, flowing prose like Perplexity AI."
+            )},
+            {"role": "user", "content": synthesis_prompt},
+        ]
+
+        # Display header
+        self.console.print(
+            f"[bold cyan]Genius[/bold cyan] [dim]—[/dim] [bold white]{query}[/bold white]"
+        )
+        self.console.print(Rule(style="cyan"))
+
+        # Stream synthesized answer
+        answer_tokens: List[str] = []
+        with self.console.status("[bold magenta]Synthesizing answer...", spinner="dots"):
+            async for token in self.engine.model.stream_generate(
+                messages, max_new_tokens=600, temperature=0.4
+            ):
+                if "<think>" in token or "</think>" in token:
+                    continue
+                answer_tokens.append(token)
+
+        raw_answer = "".join(answer_tokens)
+        # Strip any residual <think>…</think> block
+        raw_answer = _re.sub(r"<think>.*?</think>", "", raw_answer, flags=_re.DOTALL).strip()
+        clean_answer = TextSanitizer.clean_for_display(raw_answer)
+
+        # Fallback: stitch snippets manually if synthesis empty
+        if not clean_answer.strip():
+            parts_out = []
+            for s in sources[:4]:
+                snip = s["snippet"][:180].rstrip(".")
+                parts_out.append(f"{snip} [{s['index']}].")
+            clean_answer = " ".join(parts_out)
+
+        # Render answer card
+        self.console.print(
+            Panel(Text(clean_answer, style="white"), border_style="cyan", padding=(1, 2))
+        )
+
+        # ── Sources Section ───────────────────────────────────────────────
+        self.console.print()
+        self.console.print(Rule("[bold dim]  Sources  [/bold dim]", style="dim"))
+        for s in sources:
+            icon = "📖" if s["type"] == "Wikipedia" else "🌐"
+            self.console.print(
+                f"  [bold cyan][{s['index']}][/bold cyan]  {icon}  [bold white]{s['title']}[/bold white]"
+            )
+            self.console.print(f"        [dim blue]{s['url']}[/dim blue]")
+        self.console.print()
+
+    # ─────────────────────────────────────────────────────────────────────
 
     async def _process_turn(self, question: str) -> None:
         """Executes a single reasoning and conversation turn."""

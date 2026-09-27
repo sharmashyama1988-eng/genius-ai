@@ -339,19 +339,51 @@ class FoundationalEdgeProvider(BaseLLMProvider):
 
 
 class LocalQwenProvider(BaseLLMProvider):
-    """Runs Qwen2.5-0.5B-Chat natively on local hardware with zero-downtime edge fallback."""
+    """
+    Runs Qwen2.5 locally with extended context support.
+    Supports model sizes: qwen-0.5b, qwen-1.5b, qwen-3b, qwen-7b, qwen-14b, qwen-coder-7b
+    Defaults to qwen-0.5b for zero-dependency edge mode.
+    Change with: /model local:qwen-7b
+    """
 
-    def __init__(self, model_id: str = "Qwen2.5-0.5B-Chat", device: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        model_id: str = "qwen-0.5b",
+        device: Optional[str] = None,
+        extended_context: bool = True,
+        use_flash_attention: bool = True,
+    ) -> None:
         self.model_id = model_id
-        self.device = device
+        self.device_override = device
+        self.extended_context = extended_context
+        self.use_flash_attention = use_flash_attention
         self._engine: Optional[QwenEngine] = None
         self._fallback = FoundationalEdgeProvider()
 
     @property
     def engine(self) -> QwenEngine:
         if self._engine is None:
-            self._engine = QwenEngine(model_id=self.model_id, device=self.device)
+            self._engine = QwenEngine(
+                model_id=self.model_id,
+                device=self.device_override,
+                extended_context=self.extended_context,
+                use_flash_attention=self.use_flash_attention,
+            )
         return self._engine
+
+    @property
+    def context_window(self) -> int:
+        if self._engine:
+            return self._engine.context_window
+        # Return expected context without loading model
+        from .llm_engine import resolve_model_alias
+        _, info = resolve_model_alias(self.model_id)
+        return info.get("extended_ctx", 32_768)
+
+    def switch_model(self, model_id: str) -> None:
+        """Switch to a different local Qwen model size."""
+        self.model_id = model_id
+        self._engine = None  # Force reload next time
 
     async def stream_generate(
         self,
@@ -362,7 +394,7 @@ class LocalQwenProvider(BaseLLMProvider):
     ) -> AsyncIterator[str]:
         try:
             import torch
-            import transformers
+            import transformers  # noqa
             async for token in self.engine.stream_generate(
                 messages=messages,
                 max_new_tokens=max_new_tokens,
@@ -372,8 +404,8 @@ class LocalQwenProvider(BaseLLMProvider):
                 yield token
         except (ImportError, ModuleNotFoundError) as e:
             logger.info(
-                f"Local PyTorch/Transformers not installed ({e}). "
-                "Engaging zero-latency Foundational Edge Reasoning Engine."
+                f"PyTorch/Transformers not installed ({e}). "
+                "Using zero-latency Foundational Edge Engine."
             )
             async for token in self._fallback.stream_generate(
                 messages=messages,
@@ -533,8 +565,126 @@ class OllamaProvider(BaseLLMProvider):
                             continue
 
 
+
+class GeminiAPIProvider(BaseLLMProvider):
+    """
+    Google Gemini API Provider.
+
+    Context Windows:
+      gemini-2.0-flash-exp     →  1,048,576 tokens (1M)
+      gemini-1.5-flash-latest  →  1,048,576 tokens (1M)
+      gemini-1.5-pro-latest    →  2,097,152 tokens (2M)
+      gemini-2.5-pro-preview   →  1,048,576 tokens (1M)
+
+    All models support multimodal (text + images + video + audio).
+    """
+
+    MODELS: Dict[str, Dict[str, Any]] = {
+        "gemini-2.0-flash-exp": {
+            "ctx": 1_048_576, "display": "Gemini 2.0 Flash (1M ctx)"
+        },
+        "gemini-1.5-flash-latest": {
+            "ctx": 1_048_576, "display": "Gemini 1.5 Flash (1M ctx)"
+        },
+        "gemini-1.5-pro-latest": {
+            "ctx": 2_097_152, "display": "Gemini 1.5 Pro (2M ctx)"
+        },
+        "gemini-2.5-pro-preview-05-06": {
+            "ctx": 1_048_576, "display": "Gemini 2.5 Pro Preview (1M ctx)"
+        },
+    }
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model_name: str = "gemini-2.0-flash-exp",
+    ) -> None:
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
+        self.model_name = model_name
+        self.model_info = self.MODELS.get(model_name, {"ctx": 1_048_576, "display": model_name})
+        self.context_window = self.model_info["ctx"]
+        self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent"
+
+    async def stream_generate(
+        self,
+        messages: List[Dict[str, str]],
+        max_new_tokens: int = 8192,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+    ) -> AsyncIterator[str]:
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY not set.")
+
+        # Convert messages to Gemini format
+        system_instruction = ""
+        contents = []
+        for m in messages:
+            role = m.get("role", "user")
+            text = m.get("content", "")
+            if role == "system":
+                system_instruction = text
+            elif role == "user":
+                contents.append({"role": "user", "parts": [{"text": text}]})
+            elif role == "assistant":
+                contents.append({"role": "model", "parts": [{"text": text}]})
+
+        payload: Dict[str, Any] = {
+            "contents": contents,
+            "generationConfig": {
+                "maxOutputTokens": max_new_tokens,
+                "temperature": temperature,
+                "topP": top_p,
+            },
+        }
+        if system_instruction:
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
+        url = f"{self.api_url}?key={self.api_key}&alt=sse"
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                if response.status_code != 200:
+                    err = await response.aread()
+                    raise RuntimeError(f"Gemini API error ({response.status_code}): {err.decode()[:500]}")
+
+                import json as _json
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if not data_str or data_str == "[DONE]":
+                            continue
+                        try:
+                            event = _json.loads(data_str)
+                            candidates = event.get("candidates", [])
+                            for cand in candidates:
+                                for part in cand.get("content", {}).get("parts", []):
+                                    text = part.get("text", "")
+                                    if text:
+                                        yield text
+                        except _json.JSONDecodeError:
+                            continue
+
+
 class UniversalModelRouter:
-    """Manages active LLM provider and handles auto-failover."""
+    """
+    Manages active LLM provider with auto-failover and context window awareness.
+
+    Provider Context Windows:
+      local (Qwen 0.5B)      →   8K  (32K with RoPE YaRN)
+      local (Qwen 7B)        → 128K  (1M  with RoPE YaRN)
+      claude-sonnet-4.6      → 200K
+      claude-opus-4          → 200K
+      gemini-2.0-flash       →   1M
+      gemini-1.5-pro         →   2M
+      ollama                 → depends on model
+    """
+
+    CONTEXT_WINDOWS: Dict[str, int] = {
+        "local":   32_768,     # updated dynamically from QwenEngine.context_window
+        "claude":  200_000,
+        "ollama":  32_768,
+        "gemini":  1_048_576,
+    }
 
     def __init__(self, default_provider: str = "local") -> None:
         self.active_provider_name = default_provider
@@ -542,11 +692,15 @@ class UniversalModelRouter:
             "local": LocalQwenProvider(),
         }
 
-        # Auto-configure Claude if key is in environment
+        # Auto-configure Claude if key available
         if os.getenv("ANTHROPIC_API_KEY"):
             self.providers["claude"] = ClaudeAPIProvider()
 
-        # Auto-configure Ollama
+        # Auto-configure Gemini if key available
+        if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+            self.providers["gemini"] = GeminiAPIProvider()
+
+        # Always register Ollama (may not be running)
         self.providers["ollama"] = OllamaProvider()
 
     def get_provider(self, name: Optional[str] = None) -> BaseLLMProvider:
@@ -554,6 +708,8 @@ class UniversalModelRouter:
         if target not in self.providers:
             if target == "claude":
                 self.providers["claude"] = ClaudeAPIProvider()
+            elif target in ("gemini", "google"):
+                self.providers["gemini"] = GeminiAPIProvider()
             elif target == "ollama":
                 self.providers["ollama"] = OllamaProvider()
             else:
@@ -561,7 +717,40 @@ class UniversalModelRouter:
         return self.providers[target]
 
     def set_provider(self, name: str) -> bool:
-        if name in ("local", "claude", "ollama"):
-            self.active_provider_name = name
+        valid = {"local", "claude", "ollama", "gemini", "google"}
+        if name in valid:
+            actual = "gemini" if name == "google" else name
+            self.active_provider_name = actual
             return True
         return False
+
+    def context_window_size(self, name: Optional[str] = None) -> int:
+        """Returns the context window size in tokens for the given provider."""
+        target = name or self.active_provider_name
+        # Try to get live value from Qwen engine
+        if target == "local":
+            prov = self.providers.get("local")
+            if isinstance(prov, LocalQwenProvider) and prov._engine:
+                return prov._engine.context_window
+        return self.CONTEXT_WINDOWS.get(target, 32_768)
+
+    def list_providers(self) -> List[Dict[str, Any]]:
+        """Returns info about all registered providers."""
+        rows = []
+        for name, prov in self.providers.items():
+            ctx = self.context_window_size(name)
+            active = (name == self.active_provider_name)
+            has_key = True
+            if name == "claude" and not os.getenv("ANTHROPIC_API_KEY"):
+                has_key = False
+            if name == "gemini" and not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
+                has_key = False
+            rows.append({
+                "name": name,
+                "context_window": ctx,
+                "active": active,
+                "ready": has_key,
+                "type": type(prov).__name__,
+            })
+        return rows
+

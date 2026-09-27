@@ -1,0 +1,65 @@
+# Genius AI — Protocol Command Registry
+# ─────────────────────────────────────────────────────────────────────────────
+# Yahan apne project ke commands define karo.
+# Usage: /run <name>    (e.g. /run test, /run build, /run dev)
+# ─────────────────────────────────────────────────────────────────────────────
+
+[dev]
+command = python run_genius.py --research auto
+description = Genius AI ko start karo (default mode)
+
+[dev-offline]
+command = python run_genius.py --research off
+description = Genius AI ko offline/fast mode mein start karo
+
+[dev-context]
+command = python run_genius.py --research auto --context gemini
+description = Genius AI with 1M token Gemini-level context window
+
+[test]
+command = python -m pytest tests/ -v --tb=short 2>&1
+description = Saare tests run karo
+
+[lint]
+command = python -m flake8 src/ --max-line-length=120 --ignore=E203,W503 2>&1
+description = Code quality check (flake8)
+
+[format]
+command = python -m black src/ --line-length=120 2>&1
+description = Auto-format karo (black)
+
+[install]
+command = pip install -r requirements.txt 2>&1
+description = Dependencies install karo
+
+[install-dev]
+command = pip install -e ".[dev]" 2>&1
+description = Dev mode mein install karo
+
+[install-gpu]
+command = pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && pip install transformers flash-attn bitsandbytes 2>&1
+description = GPU support install karo (CUDA 12.1)
+
+[install-cpu]
+command = pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && pip install transformers 2>&1
+description = CPU-only PyTorch install karo
+
+[upgrade-model]
+command = python -c "from src.model.llm_engine import MODEL_REGISTRY; [print(k, '-', v['description']) for k, v in MODEL_REGISTRY.items()]"
+description = Available local model sizes dekhne ke liye
+
+[git-status]
+command = git status && git log --oneline -5 2>&1
+description = Git status aur recent commits dekho
+
+[git-sync]
+command = git add -A && git commit -m "feat: update by Genius AI" && git push 2>&1
+description = Sab kuch stage, commit, aur push karo
+
+[clean]
+command = python -c "import shutil, pathlib; [shutil.rmtree(p) for p in pathlib.Path('src').rglob('__pycache__')]; print('Cleaned.')"
+description = __pycache__ folders delete karo
+
+[info]
+command = python -c "import sys; print('Python:', sys.version); import platform; print('OS:', platform.platform())"
+description = System info dekhna
