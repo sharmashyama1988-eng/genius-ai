@@ -82,15 +82,19 @@ class QwenEngine:
                 trust_remote_code=True,
             )
 
-            dtype = torch.float16 if target_device == "cuda" else torch.float32
-
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_id,
-                torch_dtype=dtype,
-                device_map=target_device,
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-            )
+            if target_device == "cuda":
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    trust_remote_code=True,
+                )
+            else:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    torch_dtype=torch.float32,
+                    trust_remote_code=True,
+                ).to("cpu")
 
             self.model.eval()
             self._is_loaded = True
