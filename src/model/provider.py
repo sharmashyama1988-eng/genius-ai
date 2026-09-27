@@ -119,8 +119,24 @@ class FoundationalEdgeProvider(BaseLLMProvider):
         elif "Hindi" in system_msg or "हिंदी" in system_msg:
             lang_style = "hi"
 
+        # Detect greeting or identity intent
+        q_lower = user_msg.lower().strip()
+        is_greeting = (
+            q_lower in ["hi", "hello", "hey", "namaste", "namaskar", "halo", "yo", "sup", "pranam", "bye", "good morning", "good evening", "good afternoon"]
+            or any(q_lower.startswith(w + " ") or q_lower == w for w in ["hi", "hello", "hey", "namaste", "good morning", "good evening", "good afternoon"])
+            or any(w in q_lower for w in ["who are you", "tum kaun ho", "what are you", "your name", "introduce yourself", "kaise ho", "kya haal hai"])
+        )
+
         # Generate structured <think> sequence
-        if exemplar_think and not fact_blocks:
+        if is_greeting:
+            think_tokens = [
+                "<think>\n",
+                f"[Query Deconstruction]: User greeting / conversational initiation: '{user_msg}'.\n",
+                "[Conversational Protocol]: Acknowledge warmly as Genius, communicate readiness for research, mathematics, code, and system reasoning.\n",
+                "[Constraint Verification]: Persona alignment verified: fluent, helpful, rigorous, and ready to assist.\n",
+                "</think>\n\n",
+            ]
+        elif exemplar_think and not fact_blocks:
             think_tokens = [
                 "<think>\n",
                 f"[Query Deconstruction & Intent Analysis]: '{user_msg}'\n",
@@ -145,27 +161,26 @@ class FoundationalEdgeProvider(BaseLLMProvider):
 
         # Synthesize final response
         response_text = ""
-        q_lower = user_msg.lower().strip()
 
         # Check for identity or greetings
-        if any(w in q_lower for w in ["who are you", "tum kaun ho", "what are you", "your name", "introduce yourself"]):
+        if is_greeting:
             if lang_style == "hi-Latn":
                 response_text = (
-                    "Main **Genius** hoon — ek autonomous deep-reasoning agent jisme Dual-Core Architecture, "
-                    "Wikipedia/Web grounding, aur dynamic `<think>` cognitive state graph integrated hai. "
-                    "Main factual research, mathematics, code debugging, aur complex distributed systems ke analysis ke liye tayyar hoon. Aap kya explore karna chahte hain?"
+                    "Namaste! Main **Genius** hoon — aapka autonomous deep-reasoning AI agent. "
+                    "Mere paas dual-core architecture, live Wikipedia/web epistemic grounding, aur dynamic cognitive state graph integrated hai. "
+                    "Chahe mathematics, distributed systems, coding debugging ho ya factual research — main fully ready hoon. Aaj hum kis topic par kaam karein?"
                 )
             elif lang_style == "hi":
                 response_text = (
-                    "मैं **Genius** हूँ — एक स्वायत्त डीप-रीज़निंग (Autonomous Deep-Reasoning) एआई। "
-                    "मेरे अंदर लाइव विकिपीडिया/वेब ग्राउंडिंग, डुअल-कोर आर्किटेक्चर, और एपिस्टेमिक कॉग्निटिव रीज़निंग इंजन मौजूद है। "
-                    "आप मुझसे कोई भी शोध, कोडिंग, या तार्किक सवाल पूछ सकते हैं।"
+                    "नमस्ते! मैं **Genius** हूँ — आपका स्वायत्त डीप-रीज़निंग (Autonomous Deep-Reasoning) एआई। "
+                    "मेरे अंदर लाइव विकिपीडिया/वेब रिसर्च, डुअल-कोर आर्किटेक्चर और विस्तृत तार्किक विश्लेषण क्षमता मौजूद है। "
+                    "आप मुझसे कोई भी गणितीय समस्या, कोडिंग, सिस्टम डिज़ाइन या शोध संबंधी प्रश्न पूछ सकते हैं। बताइए, आज क्या शुरू करें?"
                 )
             else:
                 response_text = (
-                    "I am **Genius** — an autonomous deep-reasoning agent built with a 7-node Cognitive State Graph, "
+                    "Hello! I am **Genius** — an autonomous deep-reasoning agent equipped with a 7-node Cognitive State Graph, "
                     "real-time Wikipedia & Web grounding, and dual-core model routing. "
-                    "I can perform multi-hop research, mathematical derivations, code architecture analysis, and grounded factual synthesis. How can I assist you today?"
+                    "Whether you want to solve complex mathematics, analyze distributed systems, debug code, or research facts, I am ready. How can I help you today?"
                 )
 
         elif fact_blocks:
