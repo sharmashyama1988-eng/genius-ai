@@ -79,4 +79,4 @@ scratch/
 .dev/
 .dev_tools/
 auto_git_sync.py
-tests/
+

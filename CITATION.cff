@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use Genius AI or the xThinking Engine in your research or project, please cite it as below."
+authors:
+  - name: "Genius AI Authors & Contributors"
+    website: "https://github.com/sharmashyama1988-eng/genius-ai"
+title: "Genius AI: Autonomous Agent & Cognitive State Graph (CSG v2.0) Architecture"
+version: 2.0.0
+date-released: 2026-09-28
+url: "https://github.com/sharmashyama1988-eng/genius-ai"
+license: Apache-2.0
+keywords:
+  - "artificial-intelligence"
+  - "cognitive-state-graph"
+  - "autonomous-agent"
+  - "llm"
+  - "zero-cost"
+  - "rag"
+  - "epistemic-grounding"

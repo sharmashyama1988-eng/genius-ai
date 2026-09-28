@@ -37,9 +37,18 @@ class WikipediaCache:
         self.db_path = Path(db_path)
         self._init_db()
 
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            from ..system.resource_manager import SQLiteOptimizer
+            SQLiteOptimizer.optimize_connection(conn)
+        except Exception:
+            pass
+        return conn
+
     def _init_db(self) -> None:
         """Create cache tables if they do not exist."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -68,7 +77,7 @@ class WikipediaCache:
     def get_article(self, title: str) -> Optional[WikipediaArticle]:
         """Fetch article from cache if present."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT title, url, summary, full_text, page_id, sections_json FROM article_cache WHERE LOWER(title) = LOWER(?)",
@@ -92,7 +101,7 @@ class WikipediaCache:
     def save_article(self, article: WikipediaArticle) -> None:
         """Save article to cache."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -118,7 +127,7 @@ class WikipediaCache:
         """Fetch search results from cache."""
         try:
             q_hash = hashlib.sha256(query.strip().lower().encode("utf-8")).hexdigest()
-            with sqlite3.connect(self.db_path) as conn:
+            with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT results_json FROM search_cache WHERE query_hash = ?",
@@ -135,7 +144,7 @@ class WikipediaCache:
         """Save search results to cache."""
         try:
             q_hash = hashlib.sha256(query.strip().lower().encode("utf-8")).hexdigest()
-            with sqlite3.connect(self.db_path) as conn:
+            with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT OR REPLACE INTO search_cache (query_hash, results_json, cached_at) VALUES (?, ?, ?)",
@@ -152,7 +161,7 @@ class WikipediaClient:
     def __init__(
         self,
         cache_db: str | Path = "wiki_cache.db",
-        timeout: float = 12.0,
+        timeout: float = 4.0,
     ) -> None:
         self.cache = WikipediaCache(cache_db)
         self.timeout = timeout

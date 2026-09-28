@@ -107,11 +107,12 @@ class XThinkingEngine:
         episodic_manager: Optional[EpisodicMemoryManager] = None,
         grounding_engine: Optional[GroundingEngine] = None,
         research_mode: str = "auto",
+        resource_manager: Optional[Any] = None,
     ) -> None:
         self.router = UniversalModelRouter()
         self.model = model_engine or self.router.get_provider(self.router.active_provider_name)
-        self.wiki = wiki_client or WikipediaClient()
-        self.web = web_client or WebSearchClient()
+        self.wiki = wiki_client or WikipediaClient(timeout=4.0)
+        self.web = web_client or WebSearchClient(timeout=4.0)
         self.dataset_mgr = dataset_manager or DatasetManager()
         self.exemplar_retriever = ExemplarRetriever(self.dataset_mgr)
         self.ranker = PassageRanker()
@@ -121,6 +122,14 @@ class XThinkingEngine:
         self.grounding_engine = grounding_engine or GroundingEngine()
         self.research_mode: str = "auto"
         self.set_research_mode(research_mode)
+        if resource_manager is not None:
+            self.resource_mgr = resource_manager
+        else:
+            try:
+                from ..system.resource_manager import get_resource_manager
+                self.resource_mgr = get_resource_manager()
+            except Exception:
+                self.resource_mgr = None
 
     def set_model_provider(self, provider_name: str) -> bool:
         """Switch active LLM provider (e.g. 'local', 'claude', 'ollama')."""
@@ -185,11 +194,13 @@ class XThinkingEngine:
 
         conv_phrases = {
             "hi", "hello", "hey", "namaste", "namaskar", "halo", "yo", "sup", "pranam",
+            "kiddan", "salaam", "salam", "hola", "bonjour", "hallo",
             "bye", "goodbye", "good morning", "good evening", "good afternoon", "good night",
             "how are you", "how are you doing", "how do you do", "how is it going", "hows it going",
             "how r u", "how r you", "whats up", "what is up", "what are you", "who are you",
             "tum kaun ho", "kaise ho", "kya haal hai", "kya haal", "aap kaise hain", "kaise ho aap",
-            "sab theek", "kya chal raha hai", "thanks", "thank you", "dhanyawad", "shukriya",
+            "sab theek", "kya chal raha hai", "aur batao", "sab badhiya", "kya haal chaal",
+            "thanks", "thank you", "dhanyawad", "shukriya",
             "introduce yourself", "tell me about yourself", "your name", "what is your name",
         }
         if q_clean in conv_phrases:
@@ -201,11 +212,12 @@ class XThinkingEngine:
             r"\bwhats\s+up\b", r"\bkaise\s+ho\b", r"\bkya\s+haal\b", r"\bsab\s+theek\b",
             r"\baap\s+kaise\s+hain\b", r"\bkya\s+chal\s+raha\b", r"\bwho\s+are\s+you\b",
             r"\btum\s+kaun\s+ho\b", r"\bwhat\s+are\s+you\b", r"\bintroduce\s+yourself\b",
+            r"\b(hi|hello|hey|namaste|salaam|hola)\s+(genius|ai|bro|there|friend|yaar|bhai)\b",
         ]
         if any(re.search(pat, q_clean) for pat in conv_patterns):
             return True
 
-        if len(tokens) <= 3 and any(w in {"hi", "hello", "hey", "namaste", "bye", "yo", "sup"} for w in tokens):
+        if len(tokens) <= 3 and any(w in {"hi", "hello", "hey", "namaste", "bye", "yo", "sup", "salaam", "hola", "kiddan"} for w in tokens):
             return True
 
         return False
@@ -278,6 +290,18 @@ class XThinkingEngine:
         t_start = time.time()
         active_session = session_id or self.session_mgr.create_session(question[:35])
 
+        # Node 0: Dynamic Resource Limits & Hardware Adaptation
+        if hasattr(self, "resource_mgr") and self.resource_mgr:
+            limits = self.resource_mgr.tokens.get_generation_limits()
+            if max_new_tokens == 2048:
+                max_new_tokens = limits.get("max_new_tokens", max_new_tokens)
+            if max_articles == 2:
+                max_articles = limits.get("max_articles", max_articles)
+            if max_web_results == 3:
+                max_web_results = limits.get("max_web_results", max_web_results)
+            if top_k_passages == 5:
+                top_k_passages = limits.get("top_k_passages", top_k_passages)
+
         t_deconstruct_start = time.time()
         # Node 1: Query_Deconstruction
         detected_lang = self.multilingual_mgr.route_query(question)
@@ -335,12 +359,14 @@ class XThinkingEngine:
         }
         explicit_research_requested = any(rt in question.lower() for rt in research_triggers)
 
+        is_conversational_turn = (category == "conversational" or self._is_conversational(question))
+
         if active_mode in ("off", "disabled", "direct", "offline"):
             should_retrieve = False
         elif active_mode in ("on", "always", "enabled") or explicit_research_requested:
             should_retrieve = True
         else:  # auto
-            if category == "conversational" or self._is_conversational(question):
+            if is_conversational_turn:
                 should_retrieve = False
             elif category == "math" and not any(w in question.lower() for w in ["history", "who discovered", "who proved", "biography", "origin"]):
                 should_retrieve = False
@@ -362,7 +388,7 @@ class XThinkingEngine:
             )
             formatted_context = "External live search is bypassed. Answer using internal foundational knowledge, exemplars, and episodic memory."
         else:
-            # Node 2b: Epistemic_Retrieval
+            # Node 2b: Epistemic_Retrieval (Tight 4.0s maximum parallel timeout with graceful fallback)
             t_retrieval_start = time.time()
             yield ReasoningEvent(
                 stage="research",
@@ -370,12 +396,30 @@ class XThinkingEngine:
                 payload={"message": "Executing parallel Epistemic Retrieval (Wikipedia + Web)..."},
             )
 
-            wiki_task = self.wiki.search_and_fetch(search_query, max_articles=max_articles)
-            web_task = self.web.search(search_query, limit=max_web_results)
+            wiki_task = asyncio.create_task(self.wiki.search_and_fetch(search_query, max_articles=max_articles))
+            web_task = asyncio.create_task(self.web.search(search_query, limit=max_web_results))
 
-            wiki_articles, web_results = await asyncio.gather(wiki_task, web_task, return_exceptions=True)
-            articles: List[WikipediaArticle] = wiki_articles if isinstance(wiki_articles, list) else []
-            web_items: List[WebSearchResult] = web_results if isinstance(web_results, list) else []
+            done, pending = await asyncio.wait([wiki_task, web_task], timeout=4.0)
+            for p in pending:
+                p.cancel()
+
+            articles: List[WikipediaArticle] = []
+            if wiki_task in done and not wiki_task.cancelled():
+                try:
+                    res = wiki_task.result()
+                    if isinstance(res, list):
+                        articles = res
+                except Exception as e:
+                    logger.debug(f"Wiki retrieval error: {e}")
+
+            web_items: List[WebSearchResult] = []
+            if web_task in done and not web_task.cancelled():
+                try:
+                    res = web_task.result()
+                    if isinstance(res, list):
+                        web_items = res
+                except Exception as e:
+                    logger.debug(f"Web retrieval error: {e}")
 
             # Populate EpistemicEvidence objects
             for a in articles:
@@ -468,7 +512,7 @@ class XThinkingEngine:
             formatted_context = "\n\n".join(context_blocks) if context_blocks else "No direct external facts found."
 
         # In-context exemplars (bypassed for conversational / greeting queries, strictly bounded for math)
-        if category == "conversational" or self._is_conversational(question):
+        if is_conversational_turn:
             exemplars = []
         elif category == "math":
             exemplars = self.exemplar_retriever.find_relevant_exemplars(
@@ -486,30 +530,49 @@ class XThinkingEngine:
             )
 
         # Node 4: Latent_xThinking (Adaptive Token Budgeting)
-        b_base = 4096
-        gamma = 1.5
-        adaptive_thinking_budget = min(32000, int(b_base * (1.0 + gamma * contradiction_density)))
+        if is_conversational_turn:
+            adaptive_thinking_budget = 0
+            system_prompt = self.multilingual_mgr.get_system_prompt_for_language(
+                detected_lang, formatted_context, exemplars=[], is_conversational=True
+            )
+        else:
+            if hasattr(self, "resource_mgr") and self.resource_mgr:
+                adaptive_thinking_budget = self.resource_mgr.tokens.calculate_thinking_budget(contradiction_density)
+            else:
+                b_base = 4096
+                gamma = 1.5
+                adaptive_thinking_budget = min(32000, int(b_base * (1.0 + gamma * contradiction_density)))
 
-        system_prompt = self.multilingual_mgr.get_system_prompt_for_language(
-            detected_lang, formatted_context, exemplars=exemplars
-        )
+            system_prompt = self.multilingual_mgr.get_system_prompt_for_language(
+                detected_lang, formatted_context, exemplars=exemplars, is_conversational=False
+            )
+            if hasattr(self, "resource_mgr") and self.resource_mgr:
+                system_prompt = self.resource_mgr.tokens.optimize_prompt(system_prompt)
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ]
 
-        yield ReasoningEvent(
-            stage="thinking",
-            event_type="status",
-            payload={
-                "message": f"Commencing Latent_xThinking (Adaptive Budget: {adaptive_thinking_budget} tokens)...",
-                "thinking_budget": adaptive_thinking_budget,
-            },
-        )
+        if not is_conversational_turn:
+            yield ReasoningEvent(
+                stage="thinking",
+                event_type="status",
+                payload={
+                    "message": f"Commencing Latent_xThinking (Adaptive Budget: {adaptive_thinking_budget} tokens)...",
+                    "thinking_budget": adaptive_thinking_budget,
+                },
+            )
+        else:
+            yield ReasoningEvent(
+                stage="response",
+                event_type="status",
+                payload={"message": "Synthesizing conversational response..."},
+            )
 
         t_thinking_start = time.time()
         in_thinking = False
-        mode_decided = False
+        mode_decided = is_conversational_turn
         thinking_tokens_list: List[str] = []
         response_tokens_list: List[str] = []
         full_tokens: List[str] = []
@@ -522,6 +585,14 @@ class XThinkingEngine:
             ):
                 full_tokens.append(token)
                 text_so_far = "".join(full_tokens)
+
+                if is_conversational_turn:
+                    # Direct fast-path streaming: zero latency, immediate token yield
+                    clean_t = token.replace("<think>", "").replace("</think>", "")
+                    if clean_t:
+                        response_tokens_list.append(clean_t)
+                        yield ReasoningEvent(stage="response", event_type="token", payload={"token": clean_t})
+                    continue
 
                 if not mode_decided:
                     if "<think>" in text_so_far:
@@ -593,15 +664,19 @@ class XThinkingEngine:
         raw_thoughts = "".join(thinking_tokens_list).replace("<think>", "").strip()
         candidate_response = "".join(response_tokens_list).strip()
 
-        # Node 5: Hallucination_Pruning & Grounding_Gate
-        t_pruning_start = time.time()
-        verdict: GroundingVerdict = self.grounding_engine.evaluate_response_grounding(
-            candidate_response=candidate_response,
-            evidence_pool=evidence_pool,
-            retries_used=retries_used,
-            max_retries=2,
-        )
-        t_pruning_ms = round((time.time() - t_pruning_start) * 1000, 2)
+        # Node 5: Hallucination_Pruning & Grounding_Gate (bypassed for conversational greetings)
+        if is_conversational_turn:
+            verdict = GroundingVerdict(claims=[])
+            t_pruning_ms = 0.0
+        else:
+            t_pruning_start = time.time()
+            verdict = self.grounding_engine.evaluate_response_grounding(
+                candidate_response=candidate_response,
+                evidence_pool=evidence_pool,
+                retries_used=retries_used,
+                max_retries=2,
+            )
+            t_pruning_ms = round((time.time() - t_pruning_start) * 1000, 2)
 
         # Check Grounding Action
         if verdict.action == "re_retrieve" and retries_used < 2:

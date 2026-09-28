@@ -50,6 +50,12 @@ from .system.intent_router import IntentRouter, IntentType, RoutedIntent
 from .system.tools import ToolExecutor
 from .system.workspace import WorkspaceManager
 from .system.chat_viewer import ChatViewer
+from .system.resource_manager import (
+    ResourceTier,
+    SystemResourceProfile,
+    ResourceManager,
+    get_resource_manager,
+)
 
 
 class GeniusChatSession:
@@ -58,7 +64,16 @@ class GeniusChatSession:
     def __init__(self, show_thinking: bool = True, context_preset: str = "medium") -> None:
         self.console = Console()
         self.show_thinking = show_thinking
-        self.chat_view_mode: str = "cards"
+        self.chat_view_mode: str = "stream"
+
+        # ── Autonomous System Resource Manager ────────────────────────────
+        self.resource_mgr = get_resource_manager()
+        self.resource_mgr.initialize()
+
+        # Adapt default context window to hardware tier if not overridden
+        if context_preset == "medium" and self.resource_mgr.profile.tier == ResourceTier.CONSTRAINED:
+            context_preset = "small"
+
         self.engine = XThinkingEngine()
         self.engine.set_model_provider(self.engine.router.active_provider_name)
         self.workspace = WorkspaceManager()
@@ -130,13 +145,11 @@ class GeniusChatSession:
         banner.append("L1 Active + L2 Archive + L3 Episodic (SQLite FTS5)\n", style="yellow")
         banner.append("Research   : ", style="bold white")
         banner.append(f"Wikipedia + DuckDuckGo + BM25 | Mode: {self.engine.research_mode.upper()}\n", style="magenta")
-        banner.append("Git        : ", style="bold white")
-        if self.git.is_git_repo():
-            st = self.git.status()
-            clean_str = "clean" if st.is_clean else f"{len(st.unstaged)+len(st.staged)} modified"
-            banner.append(f"✓ Repo detected ({st.branch} | {clean_str})\n", style="green")
-        else:
-            banner.append("No repo (/git init)\n", style="dim")
+        profile = self.resource_mgr.profile
+        tier_style = "bold yellow" if profile.is_low_end else "bold green"
+        banner.append("Hardware   : ", style="bold white")
+        banner.append(f"{profile.tier.value} Tier", style=tier_style)
+        banner.append(f" ({profile.available_ram_gb:.1f}/{profile.total_ram_gb:.1f}GB free | {profile.cpu_count_logical} cores | SQLite WAL)\n", style="dim")
         banner.append("─" * 58 + "\n", style="dim")
         banner.append("Commands   : ", style="bold white")
         banner.append(
@@ -253,7 +266,21 @@ class GeniusChatSession:
                         self.console.print(msg if ok else f"[red]{msg}[/red]")
                         continue
 
-                # 3. Default: Conversational Deep Reasoning Turn
+                # 3. Fast-Path Short-Circuit (Instant <5ms edge response for smalltalk, greetings, affirmations)
+                from .system.genius_runtime import FastPathShortCircuit
+                fast_res = FastPathShortCircuit.evaluate(user_input)
+                if fast_res.is_short_circuit and fast_res.synthetic_response:
+                    clean_resp = fast_res.synthetic_response
+                    active_prov = self.engine.router.active_provider_name.upper()
+                    from datetime import datetime
+                    now_str = datetime.now().strftime("%H:%M:%S")
+                    title = f"[bold green]⚡ Genius [{active_prov} - Edge Fast-Path][/bold green] [dim]• {now_str}[/dim]"
+                    self.console.print()
+                    self.console.print(Panel(clean_resp, title=title, border_style="green", padding=(1, 2)))
+                    self.history.append({"user": user_input, "assistant": clean_resp})
+                    continue
+
+                # 4. Default: Conversational Deep Reasoning Turn
                 await self._process_turn(user_input)
 
             except (KeyboardInterrupt, EOFError):
@@ -589,10 +616,11 @@ class GeniusChatSession:
                 else:
                     await self._process_turn(f"Write code for {arg}")
 
-        elif cmd == "/stats":
+        elif cmd in ("/stats", "/telemetry"):
             turns = self.engine.session_mgr.get_turns(self.session_id)
             active_model = self.engine.router.active_provider_name
             summary = self.workspace.scan_project()
+            prof = self.resource_mgr.profile
             table = Table(title="Genius System Telemetry & Statistics", border_style="green")
             table.add_column("Metric", style="bold cyan")
             table.add_column("Value", style="bold white")
@@ -606,7 +634,47 @@ class GeniusChatSession:
             table.add_row("xThinking Stream", "ENABLED" if self.show_thinking else "DISABLED")
             table.add_row("Language Mode", self.forced_lang or "AUTO-DETECT")
             table.add_row("Working Memory Size", f"{len(self.history)} messages")
+
+            # Autonomous Resource Telemetry
+            tier_color = "yellow" if prof.is_low_end else "green"
+            table.add_row("Hardware Resource Tier", f"[{tier_color}]{prof.tier.value}[/{tier_color}]")
+            table.add_row("Physical / Logical Cores", f"{prof.cpu_count_physical} Cores / {prof.cpu_count_logical} Threads")
+            table.add_row("System RAM Usage", f"{prof.used_ram_gb:.1f} / {prof.total_ram_gb:.1f} GB ({prof.ram_usage_pct}%) | Free: {prof.available_ram_gb:.1f} GB")
+            table.add_row("Process Memory (RSS)", f"{self.resource_mgr.memory.get_process_rss_mb():.1f} MB (Baseline: {self.resource_mgr.memory.baseline_rss_mb:.1f} MB)")
+            table.add_row("Total Memory Freed", f"{self.resource_mgr.memory.total_freed_mb:.1f} MB across {len(self.resource_mgr.memory.cleanup_history)} sweeps")
+            table.add_row("SQLite Optimization", "WAL mode + memory cache (Zero-latency HDD I/O)")
+            table.add_row("CPU Concurrency Budget", f"I/O: {self.resource_mgr.cpu.get_optimal_worker_count('io')} | CPU: {self.resource_mgr.cpu.get_optimal_worker_count('cpu')} | BG: {self.resource_mgr.cpu.get_optimal_worker_count('background')}")
+            table.add_row("Thinking Base Budget", f"{self.resource_mgr.tokens.get_thinking_base_budget()} tokens (Adaptive)")
             self.console.print(table)
+
+        elif cmd in ("/resources", "/ram", "/hardware"):
+            prof = self.resource_mgr.refresh()
+            table = Table(title="Genius Hardware & Resource Profile", border_style="cyan")
+            table.add_column("Resource", style="bold yellow")
+            table.add_column("Specification / Current Value", style="white")
+            tier_color = "yellow" if prof.is_low_end else "green"
+            table.add_row("System Tier", f"[{tier_color}]{prof.tier.value}[/{tier_color}]")
+            table.add_row("Total Physical RAM", f"{prof.total_ram_gb:.2f} GB")
+            table.add_row("Available RAM", f"{prof.available_ram_gb:.2f} GB")
+            table.add_row("RAM Utilization", f"{prof.ram_usage_pct:.1f}%")
+            table.add_row("CPU Physical Cores", str(prof.cpu_count_physical))
+            table.add_row("CPU Logical Threads", str(prof.cpu_count_logical))
+            table.add_row("Process RSS Memory", f"{self.resource_mgr.memory.get_process_rss_mb():.1f} MB")
+            table.add_row("Cumulative Memory Freed", f"{self.resource_mgr.memory.total_freed_mb:.1f} MB")
+            table.add_row("Dedicated GPU", prof.gpu_name if prof.has_gpu else "None")
+            table.add_row("Free Disk Space", f"{prof.disk_free_gb:.1f} GB")
+            table.add_row("SQLite PRAGMAs", "PRAGMA journal_mode=WAL; synchronous=NORMAL; temp_store=MEMORY;")
+            self.console.print(table)
+
+        elif cmd in ("/clean", "/gc", "/freemem"):
+            before = self.resource_mgr.memory.get_process_rss_mb()
+            res = self.resource_mgr.memory.force_gc()
+            after = res.get("rss_after_mb", self.resource_mgr.memory.get_process_rss_mb())
+            freed = res.get("freed_mb", max(0.0, before - after))
+            self.console.print(
+                f"[bold green]✓ Autonomous Memory Cleanup Executed[/bold green]\n"
+                f"[dim]RSS Before: {before:.1f} MB ➔ RSS After: {after:.1f} MB | Freed: {freed:.1f} MB | Working Set Trimmed to OS[/dim]"
+            )
 
         elif cmd in ("/chatview", "/viewchat", "/history"):
             if not arg:
@@ -636,6 +704,8 @@ class GeniusChatSession:
             table.add_row("/calc <expr>", "Directly solve math equations, series, formulas, AST")
             table.add_row("/code <query>", "Synthesize production algorithms, data structures, templates")
             table.add_row("/stats", "Show session telemetry, project status, and cognitive state")
+            table.add_row("/resources", "Inspect hardware tier, RAM, CPU cores, SQLite WAL, and token limits")
+            table.add_row("/clean", "Force autonomous generational GC and OS working set memory reclamation")
             table.add_row("/research [mode]", "Toggle research mode: 'auto', 'on', 'off'")
             table.add_row("/model [name]", "Switch or view active LLM provider (local, claude, ollama)")
             table.add_row("/search <query>", "Execute direct Wikipedia + Web search without LLM generation")
@@ -1098,11 +1168,13 @@ class GeniusChatSession:
 
                 elif event.stage == "response":
                     if event.event_type == "status":
+                        status.stop()
                         if self.chat_view_mode == "stream":
                             lang_label = detected_info.get("name", "Multilingual") if detected_info else "Grounded"
                             active_provider = self.engine.router.active_provider_name.upper()
-                            self.console.print(f"[bold cyan]Genius [{active_provider}] ({lang_label})[/bold cyan] [dim]❯[/dim] ")
+                            self.console.print(f"[bold cyan]Genius [{active_provider}] ({lang_label})[/bold cyan] [dim]❯[/dim] ", end="")
                     elif event.event_type == "token":
+                        status.stop()
                         token = event.payload.get("token", "")
                         response_text += token
                         if self.chat_view_mode == "stream":
@@ -1161,9 +1233,15 @@ class GeniusChatSession:
                     src_type = c.get("source_type", "wikipedia").capitalize()
                     table.add_row(str(c["index"]), c["title"], src_type, c["url"])
 
-                self.console.print(table)
-
         self.history.append({"user": question, "assistant": clean_final_response})
+
+        # Autonomous Memory Management: proactive sweep & working set reclamation
+        cleanup_res = self.resource_mgr.memory.cleanup_after_turn(turn_index=len(self.history))
+        if cleanup_res.get("performed") and cleanup_res.get("freed_mb", 0) > 3.0:
+            self.console.print(
+                f"[dim]⚡ Memory optimization freed {cleanup_res['freed_mb']:.1f} MB "
+                f"(Process RSS: {cleanup_res['rss_after_mb']:.1f} MB)[/dim]"
+            )
 
 
 def main():

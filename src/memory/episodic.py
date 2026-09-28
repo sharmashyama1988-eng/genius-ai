@@ -51,6 +51,11 @@ class EpisodicMemoryManager:
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        try:
+            from ..system.resource_manager import SQLiteOptimizer
+            SQLiteOptimizer.optimize_connection(conn)
+        except Exception:
+            pass
         return conn
 
     def _init_db(self) -> None:

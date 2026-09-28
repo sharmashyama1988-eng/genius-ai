@@ -34,9 +34,18 @@ class SessionManager:
         self.db_path = Path(db_path)
         self._init_db()
 
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            from ..system.resource_manager import SQLiteOptimizer
+            SQLiteOptimizer.optimize_connection(conn)
+        except Exception:
+            pass
+        return conn
+
     def _init_db(self) -> None:
         """Initializes tables for sessions and message turns."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -69,7 +78,7 @@ class SessionManager:
         """Creates a new session and returns its ID."""
         session_id = str(uuid.uuid4())[:8]
         now = time.time()
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO sessions (session_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
@@ -91,7 +100,7 @@ class SessionManager:
         now = time.time()
         citations_json = json.dumps(citations or [])
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             # Ensure session exists
             cursor.execute("SELECT session_id FROM sessions WHERE session_id = ?", (session_id,))
@@ -116,7 +125,7 @@ class SessionManager:
 
     def get_turns(self, session_id: str, limit: int = 10) -> List[StoredTurn]:
         """Fetches the last N turns for the session in chronological order."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -145,7 +154,7 @@ class SessionManager:
 
     def list_sessions(self) -> List[Dict[str, Any]]:
         """Returns all sessions ordered by most recent activity."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """

@@ -1,0 +1,38 @@
+name: ⚡ Performance / Memory Issue
+description: Report high latency, TTFT regression, or excessive RAM/CPU utilization
+labels: ["performance", "latency", "memory"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Genius AI enforces sub-second Time-to-First-Token (TTFT) and a steady-state RSS memory ceiling of < 350MB. If you observe latency spikes or memory leaks, please report them here.
+  - type: input
+    id: measured-ttft
+    attributes:
+      label: Measured Time-to-First-Token (TTFT)
+      placeholder: e.g. 2400ms (on query: '...')
+    validations:
+      required: true
+  - type: input
+    id: measured-rss
+    attributes:
+      label: Measured RAM Usage (RSS)
+      placeholder: e.g. 520MB after 15 turns
+    validations:
+      required: true
+  - type: textarea
+    id: benchmark-output
+    attributes:
+      label: Benchmark Output (`python tests/benchmark_runtime.py`)
+      description: Paste the output of the benchmark script.
+      render: shell
+  - type: dropdown
+    id: hardware-tier
+    attributes:
+      label: System Hardware Tier
+      options:
+        - CONSTRAINED (<= 4GB RAM, dual-core CPU)
+        - BALANCED (8GB - 16GB RAM, quad-core CPU)
+        - PERFORMANCE (16GB+ RAM, dedicated GPU)
+    validations:
+      required: true

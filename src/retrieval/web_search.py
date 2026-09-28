@@ -29,7 +29,7 @@ class WebSearchResult:
 class WebSearchClient:
     """Async real-time web search and page text extraction client."""
 
-    def __init__(self, timeout: float = 12.0) -> None:
+    def __init__(self, timeout: float = 4.0) -> None:
         self.timeout = timeout
         self.headers = {
             "User-Agent": USER_AGENT,

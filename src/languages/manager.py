@@ -27,12 +27,22 @@ class MultilingualManager:
         )
         return detected
 
+    _cached_instructions: Optional[str] = None
+    _cached_mtime: float = 0.0
+
     def load_user_instructions(self, instructions_dir: str | Path = "data/instructions") -> str:
-        """Loads all custom markdown instructions and rules from data/instructions/."""
+        """Loads all custom markdown instructions and rules from data/instructions/ with in-memory caching."""
         from pathlib import Path
         p = Path(instructions_dir)
         if not p.exists() or not p.is_dir():
             return ""
+
+        try:
+            latest_mtime = max((f.stat().st_mtime for f in p.glob("*.md")), default=0.0)
+            if self._cached_instructions is not None and latest_mtime <= self._cached_mtime:
+                return self._cached_instructions
+        except Exception:
+            pass
 
         instruction_blocks = []
         for file in sorted(p.glob("*.md")):
@@ -46,22 +56,36 @@ class MultilingualManager:
                 logger.warning(f"Failed to read custom instruction {file}: {e}")
 
         if not instruction_blocks:
+            self._cached_instructions = ""
             return ""
 
-        return (
+        self._cached_instructions = (
             "=== USER CUSTOMIZATIONS & OPERATIONAL RULES ===\n"
             + "\n\n".join(instruction_blocks)
             + "\n================================================\n\n"
         )
+        self._cached_mtime = latest_mtime
+        return self._cached_instructions
 
     def get_system_prompt_for_language(
         self,
         detected: DetectedLanguage,
         formatted_context: str,
         exemplars: Optional[list] = None,
+        is_conversational: bool = False,
     ) -> str:
         """Constructs an optimized, native-sounding system prompt tailored to the detected language."""
         profile = detected.profile
+        user_customizations = self.load_user_instructions()
+
+        if is_conversational:
+            return (
+                f"{profile.system_instruction}\n\n"
+                f"{user_customizations}"
+                f"DIRECT CONVERSATIONAL DIRECTIVE:\n"
+                f"Respond directly, warmly, and concisely as Genius in {profile.name}. "
+                f"Do not emit `<think>` tags or perform lengthy analytical reasoning for simple greetings or casual chit-chat."
+            )
 
         exemplar_section = ""
         if exemplars:
@@ -79,8 +103,6 @@ class MultilingualManager:
                     )
             if blocks:
                 exemplar_section = "\n=== COGNITIVE REASONING EXEMPLARS ===\n" + "\n".join(blocks) + "\n=====================================\n\n"
-
-        user_customizations = self.load_user_instructions()
 
         prompt = (
             f"{profile.system_instruction}\n\n"

@@ -284,8 +284,32 @@ $$query' = query \oplus \{\text{unsupported entities in } c_i : G(c_i) < \tau_{c
 
 ---
 
-## 📜 License
+## 👥 Community & Contributing
 
-Distributed under the **Apache-2.0 License**. See [LICENSE](LICENSE) for more information.
+We welcome contributions from developers, researchers, and users across the globe!
 
-Built with ❤️ for autonomous AI research.
+- 📖 **[Contributing Guide](CONTRIBUTING.md)**: Development setup, coding style, invariants, and PR guidelines.
+- 📜 **[Code of Conduct](CODE_OF_CONDUCT.md)**: Contributor Covenant v2.1.
+- 🔒 **[Security Policy](SECURITY.md)**: Vulnerability disclosure and security best practices.
+- 💬 **[Support & Discussions](SUPPORT.md)**: Community discussions, questions, and bug reporting.
+- 📋 **[Changelog](CHANGELOG.md)**: Semantic versioning history and release notes.
+- 📐 **[Technical Specification](SPECIFICATION.md)**: Full Cognitive State Graph v2.0 mathematical specification.
+
+---
+
+## 📜 License & Citation
+
+Distributed under the **Apache-2.0 License**. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for full details.
+
+```bibtex
+@software{genius_ai_2026,
+  author = {Genius AI Authors and Contributors},
+  title = {Genius AI: Autonomous Agent & Cognitive State Graph (CSG v2.0) Architecture},
+  url = {https://github.com/sharmashyama1988-eng/genius-ai},
+  year = {2026},
+  version = {2.0.0}
+}
+```
+
+Built with ❤️ for autonomous, zero-cost, and low-latency AI research.
+

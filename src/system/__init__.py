@@ -9,6 +9,16 @@ from .agent_loop import AgentLoop
 from .git_ops import GitOps
 from .codebase_indexer import CodebaseIndexer, ProtocolRegistry
 from .intent_router import IntentRouter, IntentType, RoutedIntent
+from .resource_manager import (
+    ResourceTier,
+    SystemResourceProfile,
+    AdaptiveMemoryManager,
+    SQLiteOptimizer,
+    CPUBudgeter,
+    TokenBudgeter,
+    ResourceManager,
+    get_resource_manager,
+)
 
 __all__ = [
     "ActionSafetyLevel",
@@ -26,4 +36,12 @@ __all__ = [
     "IntentRouter",
     "IntentType",
     "RoutedIntent",
+    "ResourceTier",
+    "SystemResourceProfile",
+    "AdaptiveMemoryManager",
+    "SQLiteOptimizer",
+    "CPUBudgeter",
+    "TokenBudgeter",
+    "ResourceManager",
+    "get_resource_manager",
 ]
