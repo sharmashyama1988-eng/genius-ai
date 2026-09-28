@@ -19,7 +19,14 @@ import asyncio
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Dict, List, Optional
+
+try:
+    import dotenv
+    dotenv.load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except Exception:
+    pass
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -99,11 +106,15 @@ class GeniusChatSession:
 
         banner = Text()
         banner.append("⚡ GENIUS AI  —  Claude Code-Level Autonomous Agent\n", style="bold cyan")
-        banner.append("─" * 54 + "\n", style="dim")
+        banner.append("─" * 58 + "\n", style="dim")
         banner.append("Model      : ", style="bold white")
-        banner.append(f"{active_model.upper()}\n", style="green")
+        if active_model != "local":
+            banner.append(f"{active_model.upper()} (Primary Cloud Core)", style="bold green")
+            banner.append("  |  Auxiliary: LOCAL (Token Saver)\n", style="dim")
+        else:
+            banner.append(f"{active_model.upper()} (Edge Engine)\n", style="yellow")
         banner.append("Workspace  : ", style="bold white")
-        banner.append(f"{ws}\n", style="bold yellow")
+        banner.append(f"{ws}  [/path to change]\n", style="bold yellow")
         banner.append("Context    : ", style="bold white")
         banner.append(f"Dynamic {ctx_budget} active + UNLIMITED archive\n", style="cyan")
         banner.append("Auto-Intent: ", style="bold white")
@@ -119,14 +130,18 @@ class GeniusChatSession:
         banner.append("Research   : ", style="bold white")
         banner.append(f"Wikipedia + DuckDuckGo + BM25 | Mode: {self.engine.research_mode.upper()}\n", style="magenta")
         banner.append("Git        : ", style="bold white")
-        git_status = "✓ Repo detected" if self.git.is_git_repo() else "No repo (/git init)"
-        banner.append(f"{git_status}\n", style="green" if self.git.is_git_repo() else "dim")
-        banner.append("─" * 54 + "\n", style="dim")
+        if self.git.is_git_repo():
+            st = self.git.status()
+            clean_str = "clean" if st.is_clean else f"{len(st.unstaged)+len(st.staged)} modified"
+            banner.append(f"✓ Repo detected ({st.branch} | {clean_str})\n", style="green")
+        else:
+            banner.append("No repo (/git init)\n", style="dim")
+        banner.append("─" * 58 + "\n", style="dim")
         banner.append("Commands   : ", style="bold white")
         banner.append(
-            "/agent, /skills, /newskill, /run, /git, /search, /files,\n"
-            "             /read, /create, /edit, /exec, /project, /context,\n"
-            "             /index, /model, /research, /think, /export, /exit\n",
+            "/agent, /skills, /newskill, /path, /run, /git, /search, /files,\n"
+            "             /read, /create, /edit, /exec, /context, /model, /research,\n"
+            "             /think, /export, /exit\n",
             style="dim"
         )
 
@@ -219,6 +234,18 @@ class GeniusChatSession:
                     elif action == "read_file":
                         ok, msg = self.workspace.read_file(routed.argument)
                         self.console.print(msg if ok else f"[red]{msg}[/red]")
+                        continue
+                    elif action == "show_path":
+                        summary = self.workspace.scan_project()
+                        table = Table(title="Active Project Workspace", border_style="cyan")
+                        table.add_column("Property", style="bold cyan")
+                        table.add_column("Value", style="bold white")
+                        table.add_row("Root Path", str(self.workspace.get_workspace()))
+                        table.add_row("Files Count", str(summary.get("file_count", 0)))
+                        table.add_row("Folders Count", str(summary.get("dir_count", 0)))
+                        table.add_row("Languages", ", ".join(summary.get("languages", [])) or "None")
+                        self.console.print(table)
+                        self.console.print("[dim]Usage: /path <path_to_directory> to switch[/dim]")
                         continue
                     elif action == "list_files":
                         ok, msg = self.workspace.list_files()
@@ -465,7 +492,7 @@ class GeniusChatSession:
                 current = self.forced_lang or "AUTO-DETECT"
                 self.console.print(f"[dim]Current language mode: [bold]{current}[/bold][/dim]")
 
-        elif cmd in ("/project", "/workspace", "/cd"):
+        elif cmd in ("/project", "/workspace", "/cd", "/path", "/dir"):
             if not arg:
                 summary = self.workspace.scan_project()
                 table = Table(title="Active Project Workspace", border_style="cyan")
@@ -477,7 +504,7 @@ class GeniusChatSession:
                 table.add_row("Languages", ", ".join(summary.get("languages", [])) or "None")
                 table.add_row("Signatures", ", ".join(summary.get("signatures", [])) or "General Directory")
                 self.console.print(table)
-                self.console.print("[dim]Usage: /project <path_to_project_directory>[/dim]")
+                self.console.print("[dim]Usage: /path <path_to_project_directory>  or  /path to view[/dim]")
             else:
                 ok, msg, summary = self.workspace.set_workspace(arg)
                 if ok:
@@ -1153,9 +1180,9 @@ def main():
     )
     parser.add_argument(
         "-m", "--model",
-        choices=["local", "claude", "ollama"],
-        default="local",
-        help="Model provider core (default: local Qwen2.5-0.5B)",
+        choices=["local", "gemini", "google", "openrouter", "claude", "groq", "openai", "ollama"],
+        default=None,
+        help="Model provider core (default: auto-detected from .env / API keys)",
     )
     parser.add_argument(
         "--no-think",
@@ -1167,7 +1194,8 @@ def main():
 
     session = GeniusChatSession(show_thinking=not args.no_think)
     session.engine.set_research_mode(args.research)
-    session.engine.set_model_provider(args.model)
+    if args.model:
+        session.engine.set_model_provider(args.model)
 
     if args.query:
         session.print_welcome()

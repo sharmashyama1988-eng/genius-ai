@@ -665,69 +665,213 @@ class GeminiAPIProvider(BaseLLMProvider):
                             continue
 
 
+class OpenAICompatibleProvider(BaseLLMProvider):
+    """
+    Universal OpenAI-compatible API Provider.
+    Supports OpenRouter, Groq, OpenAI, Together, DeepSeek, and custom gateways.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: str = "https://openrouter.ai/api/v1",
+        model_name: str = "google/gemini-2.0-flash-001",
+        context_window: int = 1_048_576,
+        extra_headers: Optional[Dict[str, str]] = None,
+        provider_name: str = "openrouter",
+    ) -> None:
+        self.api_key = api_key or ""
+        self.base_url = base_url.rstrip("/")
+        self.model_name = model_name
+        self.context_window = context_window
+        self.extra_headers = extra_headers or {}
+        self.provider_name = provider_name
+        self.api_url = f"{self.base_url}/chat/completions"
+
+    async def stream_generate(
+        self,
+        messages: List[Dict[str, str]],
+        max_new_tokens: int = 4096,
+        temperature: float = 0.7,
+        top_p: float = 0.9,
+    ) -> AsyncIterator[str]:
+        if not self.api_key:
+            raise ValueError(f"{self.provider_name.upper()} API key not configured. Set environment variable or use start_genius.bat.")
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            **self.extra_headers,
+        }
+
+        payload = {
+            "model": self.model_name,
+            "messages": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+            "max_tokens": max_new_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "stream": True,
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", self.api_url, json=payload, headers=headers) as response:
+                if response.status_code != 200:
+                    err = await response.aread()
+                    raise RuntimeError(f"{self.provider_name.upper()} API error ({response.status_code}): {err.decode('utf-8', errors='replace')[:400]}")
+
+                import json as _json
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if not data_str or data_str == "[DONE]":
+                            continue
+                        try:
+                            data = _json.loads(data_str)
+                            choices = data.get("choices", [])
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    yield content
+                        except _json.JSONDecodeError:
+                            continue
+
+
 class UniversalModelRouter:
     """
-    Manages active LLM provider with auto-failover and context window awareness.
-
-    Provider Context Windows:
-      local (Qwen 0.5B)      →   8K  (32K with RoPE YaRN)
-      local (Qwen 7B)        → 128K  (1M  with RoPE YaRN)
-      claude-sonnet-4.6      → 200K
-      claude-opus-4          → 200K
-      gemini-2.0-flash       →   1M
-      gemini-1.5-pro         →   2M
-      ollama                 → depends on model
+    Manages active LLM provider with auto-detection, auto-failover,
+    and context window awareness across Google AI Studio, OpenRouter,
+    Claude, Groq, OpenAI, Ollama, and Local Qwen.
     """
 
     CONTEXT_WINDOWS: Dict[str, int] = {
-        "local":   32_768,     # updated dynamically from QwenEngine.context_window
-        "claude":  200_000,
-        "ollama":  32_768,
-        "gemini":  1_048_576,
+        "local":      32_768,
+        "gemini":     1_048_576,
+        "openrouter": 1_048_576,
+        "claude":     200_000,
+        "groq":       128_000,
+        "openai":     128_000,
+        "ollama":     32_768,
     }
 
-    def __init__(self, default_provider: str = "local") -> None:
-        self.active_provider_name = default_provider
+    def __init__(self, default_provider: Optional[str] = None) -> None:
         self.providers: Dict[str, BaseLLMProvider] = {
             "local": LocalQwenProvider(),
         }
 
-        # Auto-configure Claude if key available
-        if os.getenv("ANTHROPIC_API_KEY"):
-            self.providers["claude"] = ClaudeAPIProvider()
+        # Auto-configure Gemini / Google AI Studio
+        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if gemini_key:
+            self.providers["gemini"] = GeminiAPIProvider(api_key=gemini_key)
 
-        # Auto-configure Gemini if key available
-        if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
-            self.providers["gemini"] = GeminiAPIProvider()
+        # Auto-configure OpenRouter
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key:
+            self.providers["openrouter"] = OpenAICompatibleProvider(
+                api_key=openrouter_key,
+                base_url="https://openrouter.ai/api/v1",
+                model_name=os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001"),
+                context_window=1_048_576,
+                extra_headers={
+                    "HTTP-Referer": "https://github.com/sharmashyama1988-eng/genius-ai",
+                    "X-Title": "Genius AI",
+                },
+                provider_name="openrouter",
+            )
 
-        # Always register Ollama (may not be running)
+        # Auto-configure Claude
+        claude_key = os.getenv("ANTHROPIC_API_KEY")
+        if claude_key:
+            self.providers["claude"] = ClaudeAPIProvider(api_key=claude_key)
+
+        # Auto-configure Groq
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key:
+            self.providers["groq"] = OpenAICompatibleProvider(
+                api_key=groq_key,
+                base_url="https://api.groq.com/openai/v1",
+                model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                context_window=128_000,
+                provider_name="groq",
+            )
+
+        # Auto-configure OpenAI
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            self.providers["openai"] = OpenAICompatibleProvider(
+                api_key=openai_key,
+                base_url="https://api.openai.com/v1",
+                model_name=os.getenv("OPENAI_MODEL", "gpt-4o"),
+                context_window=128_000,
+                provider_name="openai",
+            )
+
+        # Always register Ollama
         self.providers["ollama"] = OllamaProvider()
 
+        # Determine default provider priority
+        explicit = default_provider or os.getenv("DEFAULT_MODEL_PROVIDER")
+        if explicit and explicit.lower() in ("gemini", "google", "openrouter", "claude", "groq", "openai", "ollama", "local"):
+            self.active_provider_name = "gemini" if explicit.lower() == "google" else explicit.lower()
+        elif gemini_key:
+            self.active_provider_name = "gemini"
+        elif openrouter_key:
+            self.active_provider_name = "openrouter"
+        elif claude_key:
+            self.active_provider_name = "claude"
+        elif groq_key:
+            self.active_provider_name = "groq"
+        elif openai_key:
+            self.active_provider_name = "openai"
+        else:
+            self.active_provider_name = "local"
+
     def get_provider(self, name: Optional[str] = None) -> BaseLLMProvider:
-        target = name or self.active_provider_name
-        if target not in self.providers:
-            if target == "claude":
-                self.providers["claude"] = ClaudeAPIProvider()
-            elif target in ("gemini", "google"):
+        target = (name or self.active_provider_name).lower()
+        if target in ("google", "gemini"):
+            target = "gemini"
+            if target not in self.providers:
                 self.providers["gemini"] = GeminiAPIProvider()
-            elif target == "ollama":
-                self.providers["ollama"] = OllamaProvider()
-            else:
-                target = "local"
+        elif target == "openrouter" and target not in self.providers:
+            self.providers["openrouter"] = OpenAICompatibleProvider(
+                api_key=os.getenv("OPENROUTER_API_KEY", ""),
+                base_url="https://openrouter.ai/api/v1",
+                model_name=os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001"),
+                provider_name="openrouter",
+            )
+        elif target == "groq" and target not in self.providers:
+            self.providers["groq"] = OpenAICompatibleProvider(
+                api_key=os.getenv("GROQ_API_KEY", ""),
+                base_url="https://api.groq.com/openai/v1",
+                model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                provider_name="groq",
+            )
+        elif target == "openai" and target not in self.providers:
+            self.providers["openai"] = OpenAICompatibleProvider(
+                api_key=os.getenv("OPENAI_API_KEY", ""),
+                base_url="https://api.openai.com/v1",
+                model_name=os.getenv("OPENAI_MODEL", "gpt-4o"),
+                provider_name="openai",
+            )
+        elif target == "claude" and target not in self.providers:
+            self.providers["claude"] = ClaudeAPIProvider()
+        elif target == "ollama" and target not in self.providers:
+            self.providers["ollama"] = OllamaProvider()
+        elif target not in self.providers:
+            target = "local"
+
         return self.providers[target]
 
     def set_provider(self, name: str) -> bool:
-        valid = {"local", "claude", "ollama", "gemini", "google"}
-        if name in valid:
-            actual = "gemini" if name == "google" else name
-            self.active_provider_name = actual
+        valid = {"local", "claude", "ollama", "gemini", "google", "openrouter", "groq", "openai"}
+        target = name.lower()
+        if target in valid:
+            self.active_provider_name = "gemini" if target == "google" else target
             return True
         return False
 
     def context_window_size(self, name: Optional[str] = None) -> int:
-        """Returns the context window size in tokens for the given provider."""
-        target = name or self.active_provider_name
-        # Try to get live value from Qwen engine
+        target = (name or self.active_provider_name).lower()
         if target == "local":
             prov = self.providers.get("local")
             if isinstance(prov, LocalQwenProvider) and prov._engine:
@@ -735,22 +879,29 @@ class UniversalModelRouter:
         return self.CONTEXT_WINDOWS.get(target, 32_768)
 
     def list_providers(self) -> List[Dict[str, Any]]:
-        """Returns info about all registered providers."""
         rows = []
-        for name, prov in self.providers.items():
+        for name in ["gemini", "openrouter", "claude", "groq", "openai", "local", "ollama"]:
             ctx = self.context_window_size(name)
             active = (name == self.active_provider_name)
             has_key = True
-            if name == "claude" and not os.getenv("ANTHROPIC_API_KEY"):
-                has_key = False
             if name == "gemini" and not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
                 has_key = False
+            elif name == "openrouter" and not os.getenv("OPENROUTER_API_KEY"):
+                has_key = False
+            elif name == "claude" and not os.getenv("ANTHROPIC_API_KEY"):
+                has_key = False
+            elif name == "groq" and not os.getenv("GROQ_API_KEY"):
+                has_key = False
+            elif name == "openai" and not os.getenv("OPENAI_API_KEY"):
+                has_key = False
+
             rows.append({
                 "name": name,
                 "context_window": ctx,
                 "active": active,
                 "ready": has_key,
-                "type": type(prov).__name__,
+                "type": type(self.get_provider(name)).__name__,
             })
         return rows
+
 

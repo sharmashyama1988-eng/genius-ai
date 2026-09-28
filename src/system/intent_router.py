@@ -134,7 +134,7 @@ class IntentRouter:
             return IntentType.MATH
         if cmd_clean == "/search":
             return IntentType.SEARCH
-        if cmd_clean in ("/project", "/files", "/create", "/read", "/view"):
+        if cmd_clean in ("/project", "/workspace", "/cd", "/path", "/dir", "/files", "/create", "/read", "/view"):
             return IntentType.WORKSPACE
         return IntentType.CHAT
 
@@ -396,6 +396,29 @@ class IntentRouter:
                 metadata={"action": "shift", "path": target_dir},
             )
 
+        # Path inquiry or shift: "path", "path D:\test", "current path", "show path"
+        path_query_match = re.search(r"^(?:show\s+)?(?:path|workspace|pwd|cwd)(?:\s+(.+))?$", raw, re.IGNORECASE)
+        if path_query_match:
+            t_dir = (path_query_match.group(1) or "").strip(" \"'")
+            if t_dir:
+                return RoutedIntent(
+                    intent_type=IntentType.WORKSPACE,
+                    command=f"/project {t_dir}",
+                    argument=t_dir,
+                    confidence=0.96,
+                    reason=f"Detected workspace path shift to '{t_dir}'.",
+                    metadata={"action": "shift", "path": t_dir},
+                )
+            else:
+                return RoutedIntent(
+                    intent_type=IntentType.WORKSPACE,
+                    command="/project",
+                    argument="",
+                    confidence=0.96,
+                    reason="Detected workspace path inquiry.",
+                    metadata={"action": "show_path"},
+                )
+
         # Image view
         img_match = re.search(
             r"(?:show|view|open|display|inspect)\s+(?:the\s+)?image\s+([a-zA-Z0-9_\-\.\/\\]+\.(?:png|jpg|jpeg|webp|gif|bmp|svg|ico))",
@@ -458,30 +481,51 @@ class IntentRouter:
 
     def _check_agent_intent(self, raw: str, q: str) -> Optional[RoutedIntent]:
         """
-        Detects autonomous software engineering tasks (Agentic Mode):
-        Creating apps, games, scripts, modules, adding features, fixing errors,
-        writing unit tests and executing them, refactoring codebases.
+        Detects autonomous tasks (Agentic Mode):
+        1. Coding tasks: Creating apps, games, scripts, modules, bug fixing, testing.
+        2. Document generation & tools: PDF, Excel, PPT, Image creation, saving files.
+        3. Multi-step research & synthesis tasks with file outputs.
         """
-        # Exclusion 1: If user explicitly asks for an explanation or definition
-        # e.g., "what is snake game", "explain how snake game works", "python mein game kaise banta hai"
+        # Exclusion 1: If user explicitly asks for a pure conceptual explanation or definition
         explanation_markers = [
-            r"\b(?:what\s+is|what\s+are|why\s+is|why\s+does|how\s+does|explain|samjhao|batao|kya\s+hota\s+hai|kya\s+hai|kaise\s+kaam\s+karta\s+hai)\b",
+            r"\b(?:what\s+is|what\s+are|why\s+is|why\s+does|how\s+does|samjhao|kya\s+hota\s+hai|kya\s+hai|kaise\s+kaam\s+karta\s+hai)\b",
             r"\b(?:difference\s+between|meaning\s+of|history\s+of|overview\s+of)\b",
         ]
         is_pure_explanation = any(re.search(pat, q) for pat in explanation_markers)
 
-        # But if they say "explain and build" or "code likho aur explain karo", we still want Agent!
+        # Direct execution/creation overrides pure explanation
         has_direct_build_command = any(re.search(pat, q) for pat in [
-            r"\b(?:banao|bana\s+do|likho|likh\s+do|create|build|implement|develop|generate|make)\b",
+            r"\b(?:banao|bana\s+do|bnao|bna\s+do|bna\s+ke|bana\s+ke|likho|likh\s+do|likh\s+ke)\b",
+            r"\b(?:create|build|implement|develop|generate|make|save|download|export)\b",
             r"\b(?:fix\s+karo|theek\s+karo|debug\s+karo|refactor\s+karo)\b",
+            r"\b(?:save\s+kar\s+do|save\s+karo|save\s+kar\s+dena)\b",
         ])
 
         if is_pure_explanation and not has_direct_build_command:
             return None
 
-        # Pattern A: Action Verb + Target Object
-        # English: "create/build/make/implement/write a snake game in Python", "add a feature", "fix bug"
-        # Hinglish: "ek snake game banao", "python mein calculator bana do", "file mein unit tests likh do"
+        # Direct Document / Artifact creation triggers (PDF, Excel, PPT, Image, Save)
+        document_action_patterns = [
+            # "pdf bna do", "ek pdf bna ke save kar do", "pdf generate karo"
+            r"\b(?:pdf|excel|sheet|spreadsheet|csv|ppt|powerpoint|presentation|slide|image|photo)\b.*?\b(?:bna|bana|save|generate|create|make|likh|export|download|chahiye|de\s+do)\b",
+            r"\b(?:bna|bana|generate|create|make|likh|export)\b.*?\b(?:pdf|excel|sheet|spreadsheet|csv|ppt|powerpoint|presentation|slide|image|photo)\b",
+            # "summery bna ke ek pdf bna ke save kar do"
+            r"\b(?:summ[ea]ry|notes|report)\b.*?\b(?:bna|bana|likh)\b.*?\b(?:pdf|excel|doc|file|save)\b",
+            # Explicit save commands: "file save kar do", "pdf bana ke save kar do"
+            r"\b(?:save\s+kar\s+do|save\s+karo|save\s+kar\s+dena|save\s+karke|save\s+kar\s+ke)\b",
+            # "bna ke ... save" / "bana ke ... save"
+            r"\b(?:bna\s+ke|bana\s+ke)\b.*?\b(?:save|pdf|excel|ppt|file)\b",
+        ]
+        for pat in document_action_patterns:
+            if re.search(pat, q, re.IGNORECASE):
+                task = raw
+                return RoutedIntent(
+                    intent_type=IntentType.AGENT,
+                    command=f"/agent {task}",
+                    argument=task,
+                    confidence=0.98,
+                    reason=f"Matched document/skill generation pattern: '{pat}'.",
+                )
 
         # Strong coding target indicators
         coding_targets = [
@@ -492,14 +536,11 @@ class IntentRouter:
         ]
         target_re = r"(?:" + "|".join(coding_targets) + r")"
 
-        # Strong action verbs (English & Hinglish)
-        # Hinglish: "banao", "bana do", "likho", "likh do", "karo", "kar do", "jodo", "implement karo"
-        # English: "create", "build", "make", "write", "implement", "develop", "code", "generate"
         agent_patterns = [
-            # "snake game banao python mein" or "ek python se game banao"
-            rf"(?:ek\s+)?.*?\b{target_re}\b.*?\b(?:banao|bana\s+do|likho|likh\s+do|bana\s+ke\s+do)\b",
+            # "snake game banao python mein" or "ek python se game bna do"
+            rf"(?:ek\s+)?.*?\b{target_re}\b.*?\b(?:banao|bana\s+do|bnao|bna\s+do|likho|likh\s+do|bana\s+ke\s+do|bna\s+ke\s+do)\b",
             # "banao ek snake game" or "likho python script"
-            rf"\b(?:banao|bana\s+do|likho|likh\s+do)\b.*?\b{target_re}\b",
+            rf"\b(?:banao|bana\s+do|bnao|bna\s+do|likho|likh\s+do)\b.*?\b{target_re}\b",
             # "create a snake game" / "build an api" / "implement auth feature"
             rf"\b(?:create|build|make|implement|develop|code|write|generate)\b.*?\b{target_re}\b",
             # "fix the bug/error" or "error fix karo"
@@ -510,16 +551,15 @@ class IntentRouter:
             r"\b(?:code|module)\b.*?\b(?:refactor|optimize)\s*(?:karo|kar\s+do)?\b",
             # "write unit tests for X and run" or "tests likho aur run karo"
             r"\b(?:write|add|generate)\b.*?\b(?:tests?|unit\s+tests?)\b",
-            r"\b(?:tests?|unit\s+tests?)\b.*?\b(?:likho|likh\s+do|add\s+karo|banao)\b",
+            r"\b(?:tests?|unit\s+tests?)\b.*?\b(?:likho|likh\s+do|add\s+karo|banao|bnao)\b",
             # "python script banao" or "fastapi app banao"
-            r"\b(?:python|fastapi|flask|django|react|html|css|javascript|node)\b.*?\b(?:banao|bana\s+do|likho|likh\s+do|build|create)\b",
+            r"\b(?:python|fastapi|flask|django|react|html|css|javascript|node)\b.*?\b(?:banao|bana\s+do|bnao|bna\s+do|likho|likh\s+do|build|create)\b",
             # "code likho ... aur file banao" / "run karke dikhao"
-            r"\b(?:run\s+karke\s+dikhao|file\s+bana\s+ke|code\s+likh\s+ke|chala\s+ke\s+dekho)\b",
+            r"\b(?:run\s+karke\s+dikhao|file\s+bana\s+ke|file\s+bna\s+ke|code\s+likh\s+ke|chala\s+ke\s+dekho)\b",
         ]
 
         for pat in agent_patterns:
             if re.search(pat, q, re.IGNORECASE):
-                # Clean up task argument
                 task = raw
                 return RoutedIntent(
                     intent_type=IntentType.AGENT,
