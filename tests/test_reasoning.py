@@ -61,7 +61,10 @@ class TestReasoningEngine(unittest.IsolatedAsyncioTestCase):
             ]
         )
 
-        engine = XThinkingEngine(model_engine=mock_model, wiki_client=mock_wiki)
+        mock_web = MagicMock()
+        mock_web.search = AsyncMock(return_value=[])
+
+        engine = XThinkingEngine(model_engine=mock_model, wiki_client=mock_wiki, web_client=mock_web)
 
         events = []
         async for event in engine.execute_stream("Who was Alan Turing?"):

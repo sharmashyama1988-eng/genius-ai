@@ -127,6 +127,11 @@ class FastPathShortCircuit:
     }
 
     @classmethod
+    def classify(cls, query: str) -> FastRouteResult:
+        """Alias for evaluate."""
+        return cls.evaluate(query)
+
+    @classmethod
     def evaluate(cls, query: str) -> FastRouteResult:
         normalized: Final[str] = query.strip()
 
