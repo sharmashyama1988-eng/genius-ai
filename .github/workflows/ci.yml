@@ -37,10 +37,14 @@ jobs:
           python -m compileall src/
 
       - name: Run unit test suite
+        env:
+          PYTHONPATH: .
         run: |
-          pytest tests/ -v --ignore=tests/test_model_live.py --ignore=tests/benchmark_runtime.py
+          python -m pytest tests/ -v --ignore=tests/test_model_live.py --ignore=tests/benchmark_runtime.py
 
       - name: Verify FastPath and Resource Manager initialization
+        env:
+          PYTHONPATH: .
         run: |
           python -c "from src.system.genius_runtime import FastPathShortCircuit; assert FastPathShortCircuit.classify('hi') is not None; print('FastPath OK')"
           python -c "from src.system.resource_manager import get_resource_manager; rm = get_resource_manager(); print('Profile:', rm.profile.tier.value); print('Resource Manager OK')"

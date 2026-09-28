@@ -35,8 +35,8 @@ def test_chunking_and_ranking(ranker):
     assert ranked[0].score > 0
 
 
-@pytest.mark.asyncio
-async def test_wikipedia_client_search_cache(tmp_path):
+def test_wikipedia_client_search_cache(tmp_path):
+    import asyncio
     cache_db = tmp_path / "test_wiki.db"
     client = WikipediaClient(cache_db=cache_db)
 
@@ -56,4 +56,4 @@ async def test_wikipedia_client_search_cache(tmp_path):
     assert cached.title == "Python (programming language)"
     assert "Guido van Rossum" in cached.full_text
 
-    await client.close()
+    asyncio.run(client.close())

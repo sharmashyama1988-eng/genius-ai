@@ -10,7 +10,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from urllib.parse import unquote
 import httpx
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +128,7 @@ class WebSearchClient:
         results: List[WebSearchResult] = []
         try:
             resp = await client.post(url, data=data)
-            if resp.status_code == 200:
+            if resp.status_code == 200 and BeautifulSoup is not None:
                 soup = BeautifulSoup(resp.text, "html.parser")
                 links = soup.select("a.result-link")
                 snippets = soup.select("td.result-snippet")
