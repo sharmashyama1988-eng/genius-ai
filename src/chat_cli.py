@@ -39,6 +39,7 @@ from .system.codebase_indexer import CodebaseIndexer, ProtocolRegistry
 from .system.executor import ExecutionResult, SystemExecutor
 from .system.git_ops import GitOps
 from .system.guard import ActionSafetyLevel, SafetyGuard
+from .system.intent_router import IntentRouter, IntentType, RoutedIntent
 from .system.tools import ToolExecutor
 from .system.workspace import WorkspaceManager
 from .system.chat_viewer import ChatViewer
@@ -58,7 +59,7 @@ class GeniusChatSession:
         self.history: List[Dict[str, str]] = []
         self.forced_lang: Optional[str] = None
 
-        # ── New: Agentic Systems ──────────────────────────────────────────
+        # ── New: Agentic Systems & Dynamic Skills ──────────────────────────
         ws = str(self.workspace.get_workspace())
         self.git = GitOps(ws)
         self.indexer = CodebaseIndexer(ws)
@@ -70,6 +71,12 @@ class GeniusChatSession:
         )
         self._agent_running = False
 
+        from agent.registry import get_skill_registry
+        from agent.skill_synthesizer import get_skill_synthesizer
+        self.skill_registry = get_skill_registry(self.workspace.get_workspace() / "agent")
+        self.skill_synthesizer = get_skill_synthesizer(self.workspace.get_workspace() / "agent")
+        self.intent_router = IntentRouter(list(self.protocol.commands.keys()))
+
     def _refresh_workspace_systems(self) -> None:
         """Called after /project changes workspace — update all systems."""
         ws = str(self.workspace.get_workspace())
@@ -78,6 +85,11 @@ class GeniusChatSession:
         self.protocol = ProtocolRegistry(ws)
         self.tool_executor = ToolExecutor(ws)
         self.executor.default_cwd = ws
+        from agent.registry import get_skill_registry
+        from agent.skill_synthesizer import get_skill_synthesizer
+        self.skill_registry = get_skill_registry(self.workspace.get_workspace() / "agent")
+        self.skill_synthesizer = get_skill_synthesizer(self.workspace.get_workspace() / "agent")
+        self.intent_router.update_protocol_cmds(list(self.protocol.commands.keys()))
 
     def print_welcome(self) -> None:
         """Displays welcome banner with all capabilities."""
@@ -94,6 +106,12 @@ class GeniusChatSession:
         banner.append(f"{ws}\n", style="bold yellow")
         banner.append("Context    : ", style="bold white")
         banner.append(f"Dynamic {ctx_budget} active + UNLIMITED archive\n", style="cyan")
+        banner.append("Auto-Intent: ", style="bold white")
+        banner.append("ACTIVE — zero-prefix automatic dispatch\n", style="bold green")
+        banner.append("Skills     : ", style="bold white")
+        s_count = len(self.skill_registry.skills)
+        s_preview = ", ".join(list(self.skill_registry.skills.keys())[:4])
+        banner.append(f"{s_count} loaded ({s_preview}) [/skills to list]\n", style="cyan")
         banner.append("Reasoning  : ", style="bold white")
         banner.append("7-node Cognitive Graph + ROUGE-L Grounding\n", style="bright_magenta")
         banner.append("Memory     : ", style="bold white")
@@ -103,22 +121,19 @@ class GeniusChatSession:
         banner.append("Git        : ", style="bold white")
         git_status = "✓ Repo detected" if self.git.is_git_repo() else "No repo (/git init)"
         banner.append(f"{git_status}\n", style="green" if self.git.is_git_repo() else "dim")
-        banner.append("Protocol   : ", style="bold white")
-        proto_cmds = list(self.protocol.commands.keys())
-        banner.append(f"{', '.join(proto_cmds[:6]) or 'No protocol.txt found'}\n", style="cyan" if proto_cmds else "dim")
         banner.append("─" * 54 + "\n", style="dim")
         banner.append("Commands   : ", style="bold white")
         banner.append(
-            "/agent, /run, /git, /search, /files, /read, /create,\n"
-            "             /edit, /exec, /project, /context, /index,\n"
-            "             /model, /research, /think, /export, /clear, /exit\n",
+            "/agent, /skills, /newskill, /run, /git, /search, /files,\n"
+            "             /read, /create, /edit, /exec, /project, /context,\n"
+            "             /index, /model, /research, /think, /export, /exit\n",
             style="dim"
         )
 
         self.console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
     async def chat_loop(self) -> None:
-        """Main conversational loop for terminal chat."""
+        """Main conversational loop for terminal chat with zero-prefix auto-dispatch."""
         self.print_welcome()
 
         while True:
@@ -129,14 +144,88 @@ class GeniusChatSession:
                 if not user_input:
                     continue
 
-                # Handle slash commands
+                # 1. Handle explicit slash commands if user wrote one
                 if user_input.startswith("/"):
                     handled = await self._handle_slash_command(user_input)
                     if handled == "exit":
                         break
                     continue
 
-                # Execute conversational turn
+                # 2. Autonomous Intent Routing (Zero-prefix Mode)
+                routed = self.intent_router.route(user_input)
+
+                if routed.intent_type == IntentType.AGENT:
+                    self.console.print(Panel(
+                        f"⚡ [bold green]Auto-Intent: Autonomous Agent Mode[/bold green]\n"
+                        f"[dim]Task:[/dim] [bold white]{routed.argument}[/bold white]",
+                        border_style="green",
+                        padding=(0, 2),
+                    ))
+                    await self._run_agent(routed.argument)
+                    continue
+
+                elif routed.intent_type == IntentType.GIT:
+                    self.console.print(f"[bold cyan]⚡ Auto-Intent:[/bold cyan] [bold yellow]Git Operation[/bold yellow] [dim]({routed.command})[/dim]")
+                    await self._handle_git_command(routed.argument)
+                    continue
+
+                elif routed.intent_type == IntentType.PROTOCOL:
+                    self.console.print(f"[bold cyan]⚡ Auto-Intent:[/bold cyan] [bold blue]Protocol Runner[/bold blue] [dim]({routed.command})[/dim]")
+                    await self._execute_protocol(routed.argument)
+                    continue
+
+                elif routed.intent_type == IntentType.INDEX:
+                    self.console.print(f"[bold cyan]⚡ Auto-Intent:[/bold cyan] [bold magenta]Codebase Indexer[/bold magenta] [dim]({routed.command})[/dim]")
+                    await self._handle_index_command(routed.argument)
+                    continue
+
+                elif routed.intent_type == IntentType.MATH:
+                    self.console.print(f"[bold cyan]⚡ Auto-Intent:[/bold cyan] [bold yellow]Math Calculation[/bold yellow]")
+                    from .reasoning.math_solver import MathSolver
+                    res = MathSolver.solve(routed.argument, lang_style=self.forced_lang or "en")
+                    if res:
+                        think, resp = res
+                        clean_resp = TextSanitizer.clean_for_display(resp)
+                        if self.show_thinking:
+                            self.console.print(Panel(TextSanitizer.clean_for_display(think), title="[bold cyan]Mathematical Derivation[/bold cyan]", border_style="cyan"))
+                        self.console.print(clean_resp)
+                        self.history.append({"user": user_input, "assistant": clean_resp})
+                    else:
+                        await self._process_turn(user_input)
+                    continue
+
+                elif routed.intent_type == IntentType.SEARCH:
+                    self.console.print(f"[bold cyan]⚡ Auto-Intent:[/bold cyan] [bold magenta]Live Perplexity Web Search[/bold magenta]")
+                    await self._perplexity_search(routed.argument)
+                    continue
+
+                elif routed.intent_type == IntentType.WORKSPACE:
+                    action = routed.metadata.get("action", "")
+                    if action == "shift":
+                        ok, msg, summary = self.workspace.set_workspace(routed.argument)
+                        if ok:
+                            self._refresh_workspace_systems()
+                            self.console.print(f"[bold green]✓ Switched project workspace to:[/bold green] [bold cyan]{self.workspace.get_workspace()}[/bold cyan]")
+                        else:
+                            self.console.print(f"[red]{msg}[/red]")
+                        continue
+                    elif action == "view_image":
+                        ok, msg, _ = self.workspace.inspect_image(routed.argument, auto_open=True)
+                        if ok:
+                            self.console.print(Panel(msg, title="[bold cyan]Image Inspector[/bold cyan]", border_style="cyan"))
+                        else:
+                            self.console.print(f"[red]{msg}[/red]")
+                        continue
+                    elif action == "read_file":
+                        ok, msg = self.workspace.read_file(routed.argument)
+                        self.console.print(msg if ok else f"[red]{msg}[/red]")
+                        continue
+                    elif action == "list_files":
+                        ok, msg = self.workspace.list_files()
+                        self.console.print(msg if ok else f"[red]{msg}[/red]")
+                        continue
+
+                # 3. Default: Conversational Deep Reasoning Turn
                 await self._process_turn(user_input)
 
             except (KeyboardInterrupt, EOFError):
@@ -291,53 +380,29 @@ class GeniusChatSession:
         elif cmd == "/git":
             await self._handle_git_command(arg)
 
-        elif cmd == "/run":
-            # Execute protocol.txt registered command
+        elif cmd == "/skills":
+            self.skill_registry.refresh()
+            table = Table(title="Genius Active Skills & Tools (in agent/skills/)", border_style="green")
+            table.add_column("Skill Name", style="bold cyan")
+            table.add_column("Description", style="white")
+            table.add_column("CLI Usage", style="dim")
+            for s in self.skill_registry.list_all():
+                table.add_row(s.name, s.description, s.cli_usage)
+            self.console.print(table)
+            self.console.print("[dim]Add custom skills in 'agent/skills/' or ask Genius to create one autonomously via /newskill[/dim]")
+
+        elif cmd == "/newskill":
             if not arg:
-                self.console.print(self.protocol.list_all())
+                self.console.print("[yellow]Usage: /newskill <description of what the tool should do>[/yellow]")
             else:
-                cmd_name = arg.strip().lower()
-                proto_cmd = self.protocol.get_command(cmd_name)
-                if proto_cmd:
-                    self.console.print(f"[bold cyan]Running protocol:[/bold cyan] [bold white]{cmd_name}[/bold white]")
-                    self.console.print(f"[dim]Command: {proto_cmd}[/dim]")
-                    result = self.tool_executor.run_command(proto_cmd)
-                    if result.success:
-                        self.console.print(f"[green]✓ Exit 0[/green]")
-                        if result.output:
-                            self.console.print(Panel(result.output.strip(), border_style="green", title=f"[green]{cmd_name}[/green]"))
-                    else:
-                        self.console.print(f"[red]✗ Failed[/red]")
-                        if result.output:
-                            self.console.print(Panel(result.output.strip() + "\n" + result.error, border_style="red", title=f"[red]{cmd_name} — error[/red]"))
-                else:
-                    self.console.print(f"[red]No protocol command '{cmd_name}'.[/red]")
-                    self.console.print(self.protocol.list_all())
+                self.console.print(f"[bold cyan]⚡ Self-Evolution Triggered:[/bold cyan] Designing new skill for: [bold white]{arg}[/bold white]")
+                await self._run_agent(f"Create a new reusable skill in agent/skills/ for: {arg}. Write production-ready code with CLI support, test it with run_command, and verify it works.")
+
+        elif cmd == "/run":
+            await self._execute_protocol(arg)
 
         elif cmd == "/index":
-            # Codebase symbol indexing
-            self.console.print("[bold cyan]Indexing codebase...[/bold cyan]")
-            with self.console.status("[dim]Building symbol map...", spinner="dots"):
-                idx = self.indexer.build_index()
-            self.console.print(f"[green]✓ Indexed {idx.total_files} files | {idx.total_lines} lines | {len(idx.symbol_map)} symbols[/green]")
-            if arg:
-                # Symbol search
-                results = idx.find_symbol(arg)
-                if results:
-                    tbl = Table(title=f"Symbol: '{arg}'", box=None)
-                    tbl.add_column("Name", style="cyan")
-                    tbl.add_column("Kind", style="yellow")
-                    tbl.add_column("File", style="dim")
-                    tbl.add_column("Line", style="white")
-                    for s in results[:20]:
-                        import os as _os
-                        rel = _os.path.relpath(s.file, str(self.workspace.get_workspace()))
-                        tbl.add_row(s.name, s.kind, rel, str(s.line))
-                    self.console.print(tbl)
-                else:
-                    self.console.print(f"[dim]No symbol matching '{arg}' found.[/dim]")
-            else:
-                self.console.print(idx.summary_for_agent())
+            await self._handle_index_command(arg)
 
         elif cmd == "/search":
             if not arg:
@@ -653,6 +718,57 @@ class GeniusChatSession:
             title=f"[bold {color}]Agent Complete[/bold {color}]",
             border_style=color,
         ))
+
+    # ── Protocol & Index Handlers ─────────────────────────────────────────────
+
+    async def _execute_protocol(self, cmd_name: str) -> None:
+        """Executes a registered command from protocol.txt."""
+        if not cmd_name:
+            self.console.print(self.protocol.list_all())
+            return
+
+        clean_name = cmd_name.strip().lower()
+        proto_cmd = self.protocol.get_command(clean_name)
+        if proto_cmd:
+            self.console.print(f"[bold cyan]Running protocol:[/bold cyan] [bold white]{clean_name}[/bold white]")
+            self.console.print(f"[dim]Command: {proto_cmd}[/dim]")
+            result = self.tool_executor.run_command(proto_cmd)
+            if result.success:
+                self.console.print("[green]✓ Exit 0[/green]")
+                if result.output:
+                    self.console.print(Panel(result.output.strip(), border_style="green", title=f"[green]{clean_name}[/green]"))
+            else:
+                self.console.print("[red]✗ Failed[/red]")
+                if result.output or result.error:
+                    err_text = (result.output or "") + "\n" + (result.error or "")
+                    self.console.print(Panel(err_text.strip(), border_style="red", title=f"[red]{clean_name} — error[/red]"))
+        else:
+            self.console.print(f"[red]No protocol command '{clean_name}'.[/red]")
+            self.console.print(self.protocol.list_all())
+
+    async def _handle_index_command(self, arg: str) -> None:
+        """Indexes codebase or searches for symbols."""
+        self.console.print("[bold cyan]Indexing codebase...[/bold cyan]")
+        with self.console.status("[dim]Building symbol map...", spinner="dots"):
+            idx = self.indexer.build_index()
+        self.console.print(f"[green]✓ Indexed {idx.total_files} files | {idx.total_lines} lines | {len(idx.symbol_map)} symbols[/green]")
+        if arg:
+            results = idx.find_symbol(arg)
+            if results:
+                tbl = Table(title=f"Symbol: '{arg}'", box=None)
+                tbl.add_column("Name", style="cyan")
+                tbl.add_column("Kind", style="yellow")
+                tbl.add_column("File", style="dim")
+                tbl.add_column("Line", style="white")
+                for s in results[:20]:
+                    import os as _os
+                    rel = _os.path.relpath(s.file, str(self.workspace.get_workspace()))
+                    tbl.add_row(s.name, s.kind, rel, str(s.line))
+                self.console.print(tbl)
+            else:
+                self.console.print(f"[dim]No symbol matching '{arg}' found.[/dim]")
+        else:
+            self.console.print(idx.summary_for_agent())
 
     # ── Git Command Handler ────────────────────────────────────────────────────
 
@@ -1055,7 +1171,19 @@ def main():
 
     if args.query:
         session.print_welcome()
-        asyncio.run(session._process_turn(args.query))
+        routed = session.intent_router.route(args.query)
+        if routed.intent_type == IntentType.AGENT:
+            asyncio.run(session._run_agent(routed.argument))
+        elif routed.intent_type == IntentType.GIT:
+            asyncio.run(session._handle_git_command(routed.argument))
+        elif routed.intent_type == IntentType.PROTOCOL:
+            asyncio.run(session._execute_protocol(routed.argument))
+        elif routed.intent_type == IntentType.INDEX:
+            asyncio.run(session._handle_index_command(routed.argument))
+        elif routed.intent_type == IntentType.SEARCH:
+            asyncio.run(session._perplexity_search(routed.argument))
+        else:
+            asyncio.run(session._process_turn(args.query))
     else:
         asyncio.run(session.chat_loop())
 

@@ -213,6 +213,16 @@ class AgentLoop:
             "",
             get_tool_system_prompt(),
         ]
+        # Inject available specialized skills from agent/skills/
+        try:
+            from agent.registry import get_skill_registry
+            reg = get_skill_registry(Path(self.workspace_root) / "agent")
+            skills_prompt = reg.get_agent_prompt_summary()
+            if skills_prompt:
+                parts.append("\n" + skills_prompt)
+        except Exception:
+            pass
+
         if genius_md:
             parts.append(genius_md)
         parts += [

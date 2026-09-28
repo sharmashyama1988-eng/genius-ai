@@ -1,0 +1,195 @@
+================================================================================
+⚡ GENIUS AI — ADVANCED SKILLS & SELF-EVOLVING TOOLS ARCHITECTURE GUIDE
+================================================================================
+Language: English & Hinglish (हिंदी / English)
+Target Directory: F:\Dekstop\llm\agent\skills\
+File: F:\Dekstop\llm\agent\SKILLS_GUIDE.txt
+
+--------------------------------------------------------------------------------
+1. OVERVIEW & PHILOSOPHY (यह सिस्टम क्या है और कैसे काम करता है?)
+--------------------------------------------------------------------------------
+Genius AI ek "Self-Evolving Cognitive System" hai. 
+Aam taur par AI models sirf wahi kaam kar sakte hain jo unki training ya hardcoded 
+tools mein hota hai. Lekin Genius AI mein:
+
+1. Manual Skill Creation: User khud apni Python scripts `agent/skills/` mein daal 
+   sakta hai, aur AI unhe automatically detect karke use karega.
+2. Autonomous Self-Evolution (Self-Evolving AI): Agar user AI se baatein karte huye 
+   kahe: "Mujhe ek naya tool chahiye jo crypto prices track kare", toh AI KHUD:
+   - Code sochega aur likhega
+   - `agent/skills/<skill_name>.py` mein save karega
+   - Run karke verify karega
+   - Aur turant use karke user ka kaam kar dega!
+   
+Koi restart ya reconfiguration ki zaroorat nahi hai. Dynamic Hot-Reloading active hai!
+
+--------------------------------------------------------------------------------
+2. FOLDER STRUCTURE (Folder ka Structure)
+--------------------------------------------------------------------------------
+F:\Dekstop\llm\agent\
+│
+├── registry.py                 # Skill Registry Engine (Scans & discovers all tools)
+├── skill_synthesizer.py        # Self-Evolving Engine (AI creates new tools on the fly)
+├── README.md                   # Markdown Quickstart Guide
+├── SKILLS_GUIDE.txt            # Yeh Detailed Developer Guide
+│
+└── skills/                     # 👈 SAARI SKILLS YAHAN REHTI HAIN
+    ├── pdf_generator.py        # [Pre-built] Enterprise Multi-page PDF Generator
+    ├── excel_generator.py      # [Pre-built] Formatted .xlsx Excel Sheet Generator
+    ├── ppt_generator.py        # [Pre-built] 16:9 Widescreen PowerPoint Presentation Generator
+    │
+    ├── imagen/                 # [Pre-built] Image Generation Package
+    │   ├── __init__.py
+    │   └── image_generator.py  # Text-to-Image (Pollinations / DALL-E / Custom API)
+    │
+    └── [your_new_skill].py     # 👈 User ya AI ka naya skill yahan aayega!
+
+--------------------------------------------------------------------------------
+3. HOW TO WRITE A SKILL MANUALLY (User Khud Script Kaise Likhe?)
+--------------------------------------------------------------------------------
+Skill likhne ke sirf 3 basic rules hain (Zero Complexity):
+
+RULE 1: File ke top par Docstring likho
+  AI docstring padh kar samajhta hai ki yeh tool kab aur kyu chalana hai.
+
+RULE 2: Main logic ko ek function mein wrap karo
+  Jaise: def generate_data(...), def convert_file(...), def fetch_prices(...)
+
+RULE 3: CLI Entrypoint do (`if __name__ == "__main__":`)
+  Taaki AI aur User terminal se bhi direct command chala sakein.
+
+────────────────────────────────────────────────────────────────────────────────
+TEMPLATE (Copy & Paste this to create any new skill):
+────────────────────────────────────────────────────────────────────────────────
+"""
+My Custom Skill Name — One line summary of what this tool does.
+
+Detailed Description:
+  • Does X, Y, and Z
+  • Takes inputs: A, B
+  • Returns output file or result
+"""
+
+from __future__ import annotations
+import argparse
+import sys
+from pathlib import Path
+
+def my_main_function(input_data: str, output_path: str = "result.txt") -> str:
+    """Core logic of your tool."""
+    out_p = Path(output_path).resolve()
+    
+    # ── YOUR CODE GOES HERE ──────────────────────────────────
+    processed = f"Processed: {input_data.upper()}"
+    out_p.write_text(processed, encoding="utf-8")
+    # ─────────────────────────────────────────────────────────
+    
+    return str(out_p)
+
+def main():
+    parser = argparse.ArgumentParser(description="My Custom Skill CLI")
+    parser.add_argument("-i", "--input", required=True, help="Input argument")
+    parser.add_argument("-o", "--output", default="output.txt", help="Output path")
+    args = parser.parse_args()
+
+    try:
+        res = my_main_function(args.input, args.output)
+        print(f"SUCCESS: Saved output to {res}")
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+────────────────────────────────────────────────────────────────────────────────
+
+--------------------------------------------------------------------------------
+4. REAL-WORLD EXAMPLES YOU CAN BUILD (Aap Kya-Kya Bana Sakte Hain?)
+--------------------------------------------------------------------------------
+Koi limit nahi hai! Kuch ideas:
+
+EXAMPLE A: YouTube Video / Audio Downloader
+  File: agent/skills/yt_downloader.py
+  Library: yt-dlp
+  Usage: AI se kaho: "is YouTube link ka audio mp3 download kar do"
+
+EXAMPLE B: Web Scraper / News Aggregator
+  File: agent/skills/news_scraper.py
+  Library: beautifulsoup4, httpx
+  Usage: AI se kaho: "TechCrunch se latest 10 AI news scrape karke summary do"
+
+EXAMPLE C: Voice Synthesis / Edge TTS
+  File: agent/skills/voice_speaker.py
+  Library: edge-tts
+  Usage: AI se kaho: "is summary ko Hindi voice mein audio bana ke save karo"
+
+EXAMPLE D: Database Exporter / Query Tool
+  File: agent/skills/sql_exporter.py
+  Library: sqlite3, pandas
+  Usage: AI se kaho: "users database se inactive accounts filter karke CSV banao"
+
+EXAMPLE E: QR Code & Barcode Generator
+  File: agent/skills/qr_maker.py
+  Library: qrcode, python-barcode
+  Usage: AI se kaho: "WiFi password ka QR code bana do"
+
+--------------------------------------------------------------------------------
+5. 🧠 ADVANCED OPTION: SELF-EVOLVING AI (AI Khud Baatein Sun Ke Skill Bana Le)
+--------------------------------------------------------------------------------
+Genius AI v2.0 ke pass "Autonomous Skill Synthesizer" engine hai:
+
+Yeh Kaise Kaam Karta Hai?
+1. Aap chat terminal mein natural language mein kuch bhi bolte ho:
+   User: "Genius, ek skill banao jo kisi bhi text file ko audio MP3 mein convert kare"
+   Ya: "Mujhe ek tool chahiye jo folder ki saari images ko WebP format mein compress kare"
+
+2. AI ka Autonomous Engine:
+   Step A [Deconstruct]: Tool ke requirements aur arguments samjhega.
+   Step B [Code Generation]: Production-quality, error-handled Python code likhega.
+   Step C [File Write]: Code ko `F:\Dekstop\llm\agent\skills\<tool_name>.py` mein save karega.
+   Step D [Sandbox Test]: Terminal pe us script ko run karke test karega (Exit code 0 verify karega).
+   Step E [Hot-Reload]: SkillRegistry ko turant refresh karega.
+   Step F [Live Execution]: Naye tool ko use karke aapka original kaam complete karega!
+
+3. Commands:
+   • Terminal mein likho: /skills
+     -> Saari active aur newly evolved skills ki live list dikhata hai.
+   • Terminal mein likho: /newskill <description>
+     -> Forcefully AI se naya skill create karwao!
+
+--------------------------------------------------------------------------------
+6. PRE-BUILT SKILLS QUICK REFERENCE (Pahale se Available Skills)
+--------------------------------------------------------------------------------
+
+1. PDF GENERATOR (`agent/skills/pdf_generator.py`)
+   - Function: generate_pdf(output_path, title, sections, ...)
+   - CLI: python -m agent.skills.pdf_generator -o doc.pdf -t "Title" -c "Content"
+   - Features: Multi-page, headers/footers, tables, zebra shading, callout boxes.
+
+2. EXCEL GENERATOR (`agent/skills/excel_generator.py`)
+   - Function: generate_excel(output_path, sheets, theme, ...)
+   - CLI: python -m agent.skills.excel_generator -o sheet.xlsx -t "Sales"
+   - Features: Multi-sheet, auto-fit columns, formula injection, currency formatting.
+
+3. PPT GENERATOR (`agent/skills/ppt_generator.py`)
+   - Function: create_presentation(output_path, title, slides, theme, ...)
+   - CLI: python -m agent.skills.ppt_generator -o deck.pptx -t "AI Strategy"
+   - Features: 16:9 widescreen, dark/navy palettes, KPI stat cards, two-column cards.
+
+4. IMAGEN / IMAGE GENERATOR (`agent/skills/imagen/image_generator.py`)
+   - Function: generate_image(prompt, output_path, width, height, ...)
+   - CLI: python -m agent.skills.imagen.image_generator -p "prompt" -o img.png
+   - Features: Free zero-key generation (Pollinations/FLUX) + DALL-E / Custom API.
+
+--------------------------------------------------------------------------------
+7. BEST PRACTICES (Kaamyabi ke Nuskhe)
+--------------------------------------------------------------------------------
+✓ Hamesha script mein error handling (try/except) lagao.
+✓ Required dependencies ko requirements.txt mein add karo.
+✓ File outputs ko relative ya absolute safe path par save karo.
+✓ CLI arguments ke liye argparse use karo taaki AI usko terminal se run kar sake.
+✓ Self-Evolving AI ko natural language mein clearly bolo: "Ek skill banao jo..." aur AI baaki sab khud sambhaal lega!
+
+================================================================================
+Genius AI — Self-Evolving Autonomous Intelligence | Zero Limits
+================================================================================

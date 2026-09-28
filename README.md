@@ -113,28 +113,24 @@ python run_genius.py "Explain quantum entanglement in simple terms" --no-think
 
 ---
 
-## 🎮 Interactive Slash Commands
+## 🎮 Interactive Slash Commands & Agentic Tools
 
-Inside the Genius terminal, type `/` to access built-in tools:
+> 📖 **Full Documentation**: For complete usage, examples, and options, see [COMMANDS.md](COMMANDS.md).
 
-| Command | What It Does |
-|---|---|
-| `/help` | View all available interactive commands and options |
-| `/chatview [cards\|stream\|html]` | Switch between terminal cards, flowing text, or open full HTML view in your browser |
-| `/project [path]` | Shift workspace into any folder and automatically inspect codebase structure |
-| `/files [subpath]` | Display a clean file tree with human-readable file sizes |
-| `/read <file>` | Read content of any source file or inspect image metadata |
-| `/create <file> [content]` | Quickly create new code or text files inside the active project |
-| `/view <image>` | Read image resolution, byte header, and open in native OS viewer |
-| `/calc <math>` | Solve mathematical equations and series with clean Unicode output |
-| `/code <query>` | Synthesize robust, production-ready algorithms and templates |
-| `/search <query>` | Perform direct live Wikipedia + DuckDuckGo search without LLM inference |
-| `/model [local\|claude\|ollama]` | Switch active reasoning engine core on the fly |
-| `/think` | Toggle live extended thinking (`<think>`) on or off |
-| `/lang [code]` | Force language mode (`en`, `hi-Latn`, `hi`, `es`, `fr`, `de`, `auto`) |
-| `/stats` | View session telemetry, memory footprint, and token stats |
-| `/clear` | Clear screen and reset active conversation memory |
-| `/exit` | Exit the session cleanly |
+Genius AI v2.0 features **Claude Code-level autonomous execution**, git automation, and dynamic context:
+
+| Category | Command | Description |
+|---|---|---|
+| 🤖 **Autonomous Agent** | `/agent <task>` | End-to-end coding loop — scans repo, creates/edits files, runs tests, fixes errors |
+| 🔀 **Git Ops** | `/git [status\|commit\|push\|branch\|pr\|conflicts]` | Full git automation without leaving terminal |
+| ⚙️ **Protocol Runner** | `/run [test\|dev\|build\|lint\|...]` | Execute registered commands defined in `protocol.txt` |
+| 🔍 **Codebase Indexer** | `/index [symbol]` | Scan codebase, map symbols/functions, track references & imports |
+| 🧠 **Dynamic Context** | `/context [small\|medium\|gemini\|ultra\|infinite]` | Adaptive context window — scale from 8K up to unlimited infinite archive |
+| 🔄 **Model Router** | `/model [local:qwen-7b\|claude\|gemini\|ollama]` | Switch reasoning models with auto-detected context budgets |
+| 🔎 **Live Search** | `/search <query>` | Perplexity-style live search with numbered inline citations |
+| 📁 **Workspace** | `/project`, `/files`, `/read`, `/create`, `/view` | Navigate directories, inspect files, and view images |
+| 💬 **Chat & Display** | `/chatview`, `/think`, `/lang`, `/stats`, `/calc`, `/code` | Toggle CoT thoughts, customize language, export HTML/markdown |
+| ⚙️ **Session** | `/sessions`, `/new`, `/clear`, `/help`, `/exit` | Manage episodic chat sessions and memory |
 
 ---
 
@@ -176,6 +172,8 @@ genius-ai/
 │   ├── retrieval/             # Live Wikipedia client, DuckDuckGo search, and BM25 ranker
 │   ├── system/                # Workspace manager, image inspector, safety guard, chat viewer
 │   └── chat_cli.py            # Rich interactive CLI with rounded cards & HTML exporter
+├── COMMANDS.md                # Complete command reference & agentic guide
+├── protocol.txt               # Configurable project command registry (/run <cmd>)
 ├── pyproject.toml             # Standard Python packaging specification
 ├── requirements.txt           # Python dependencies
 ├── setup.bat                  # 1-click Windows installation script
