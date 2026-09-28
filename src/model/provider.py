@@ -580,30 +580,33 @@ class GeminiAPIProvider(BaseLLMProvider):
     """
 
     MODELS: Dict[str, Dict[str, Any]] = {
-        "gemini-2.0-flash-exp": {
+        "gemini-2.5-flash": {
+            "ctx": 1_048_576, "display": "Gemini 2.5 Flash (1M ctx)"
+        },
+        "gemini-2.0-flash": {
             "ctx": 1_048_576, "display": "Gemini 2.0 Flash (1M ctx)"
         },
-        "gemini-1.5-flash-latest": {
+        "gemini-1.5-flash": {
             "ctx": 1_048_576, "display": "Gemini 1.5 Flash (1M ctx)"
         },
-        "gemini-1.5-pro-latest": {
-            "ctx": 2_097_152, "display": "Gemini 1.5 Pro (2M ctx)"
+        "gemini-2.5-pro": {
+            "ctx": 2_097_152, "display": "Gemini 2.5 Pro (2M ctx)"
         },
-        "gemini-2.5-pro-preview-05-06": {
-            "ctx": 1_048_576, "display": "Gemini 2.5 Pro Preview (1M ctx)"
+        "gemini-1.5-pro": {
+            "ctx": 2_097_152, "display": "Gemini 1.5 Pro (2M ctx)"
         },
     }
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "gemini-2.0-flash-exp",
+        model_name: str = "gemini-2.5-flash",
     ) -> None:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
-        self.model_name = model_name
-        self.model_info = self.MODELS.get(model_name, {"ctx": 1_048_576, "display": model_name})
+        self.model_name = os.getenv("GEMINI_MODEL", model_name)
+        self.model_info = self.MODELS.get(self.model_name, {"ctx": 1_048_576, "display": self.model_name})
         self.context_window = self.model_info["ctx"]
-        self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent"
+        self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:streamGenerateContent"
 
     async def stream_generate(
         self,
@@ -639,50 +642,56 @@ class GeminiAPIProvider(BaseLLMProvider):
         if system_instruction:
             payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
-        url = f"{self.api_url}?key={self.api_key}&alt=sse"
+        candidate_models = [self.model_name, "gemini-2.0-flash", "gemini-1.5-flash"]
+        for cand in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{cand}:streamGenerateContent?key={self.api_key}&alt=sse"
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", url, json=payload) as response:
-                if response.status_code != 200:
-                    err = await response.aread()
-                    raise RuntimeError(f"Gemini API error ({response.status_code}): {err.decode()[:500]}")
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream("POST", url, json=payload) as response:
+                    if response.status_code == 404 and cand != candidate_models[-1]:
+                        continue
+                    if response.status_code != 200:
+                        err = await response.aread()
+                        raise RuntimeError(f"Gemini API error ({response.status_code}): {err.decode()[:500]}")
 
-                import json as _json
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if not data_str or data_str == "[DONE]":
-                            continue
-                        try:
-                            event = _json.loads(data_str)
-                            candidates = event.get("candidates", [])
-                            for cand in candidates:
-                                for part in cand.get("content", {}).get("parts", []):
-                                    text = part.get("text", "")
-                                    if text:
-                                        yield text
-                        except _json.JSONDecodeError:
-                            continue
+                    import json as _json
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            try:
+                                event = _json.loads(data_str)
+                                candidates = event.get("candidates", [])
+                                for candidate in candidates:
+                                    for part in candidate.get("content", {}).get("parts", []):
+                                        text = part.get("text", "")
+                                        if text:
+                                            yield text
+                            except _json.JSONDecodeError:
+                                continue
+                    return
 
 
 class OpenAICompatibleProvider(BaseLLMProvider):
     """
     Universal OpenAI-compatible API Provider.
     Supports OpenRouter, Groq, OpenAI, Together, DeepSeek, and custom gateways.
+    Features automatic fallback routing if a model endpoint is deprecated.
     """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         base_url: str = "https://openrouter.ai/api/v1",
-        model_name: str = "google/gemini-2.0-flash-001",
+        model_name: str = "google/gemini-2.5-flash",
         context_window: int = 1_048_576,
         extra_headers: Optional[Dict[str, str]] = None,
         provider_name: str = "openrouter",
     ) -> None:
         self.api_key = api_key or ""
         self.base_url = base_url.rstrip("/")
-        self.model_name = model_name
+        self.model_name = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free" if provider_name == "openrouter" else model_name)
         self.context_window = context_window
         self.extra_headers = extra_headers or {}
         self.provider_name = provider_name
@@ -704,37 +713,58 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             **self.extra_headers,
         }
 
-        payload = {
-            "model": self.model_name,
-            "messages": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
-            "max_tokens": max_new_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
-            "stream": True,
-        }
+        # 100% FREE models chain on OpenRouter (zero credits needed)
+        candidate_models = [self.model_name]
+        if self.provider_name == "openrouter":
+            free_chain = [
+                "nvidia/nemotron-3-ultra-550b-a55b:free",
+                "nvidia/nemotron-3.5-lightning:free",
+                "google/gemma-4-31b-it:free",
+                "qwen/qwen3.8-27b:free",
+                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+            ]
+            for fallback in free_chain:
+                if fallback not in candidate_models:
+                    candidate_models.append(fallback)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", self.api_url, json=payload, headers=headers) as response:
-                if response.status_code != 200:
-                    err = await response.aread()
-                    raise RuntimeError(f"{self.provider_name.upper()} API error ({response.status_code}): {err.decode('utf-8', errors='replace')[:400]}")
+        for model_cand in candidate_models:
+            payload = {
+                "model": model_cand,
+                "messages": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages],
+                "max_tokens": max_new_tokens,
+                "temperature": temperature,
+                "top_p": top_p,
+                "stream": True,
+            }
 
-                import json as _json
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if not data_str or data_str == "[DONE]":
-                            continue
-                        try:
-                            data = _json.loads(data_str)
-                            choices = data.get("choices", [])
-                            if choices:
-                                delta = choices[0].get("delta", {})
-                                content = delta.get("content", "")
-                                if content:
-                                    yield content
-                        except _json.JSONDecodeError:
-                            continue
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream("POST", self.api_url, json=payload, headers=headers) as response:
+                    if response.status_code in (404, 429) and len(candidate_models) > 1 and model_cand != candidate_models[-1]:
+                        # Try next free model in chain
+                        continue
+
+                    if response.status_code != 200:
+                        err = await response.aread()
+                        raise RuntimeError(f"{self.provider_name.upper()} API error ({response.status_code}): {err.decode('utf-8', errors='replace')[:400]}")
+
+                    import json as _json
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            try:
+                                data = _json.loads(data_str)
+                                choices = data.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        yield content
+                            except _json.JSONDecodeError:
+                                continue
+                    # Successfully completed stream
+                    return
 
 
 class UniversalModelRouter:
@@ -770,7 +800,7 @@ class UniversalModelRouter:
             self.providers["openrouter"] = OpenAICompatibleProvider(
                 api_key=openrouter_key,
                 base_url="https://openrouter.ai/api/v1",
-                model_name=os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001"),
+                model_name=os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"),
                 context_window=1_048_576,
                 extra_headers={
                     "HTTP-Referer": "https://github.com/sharmashyama1988-eng/genius-ai",
@@ -836,7 +866,7 @@ class UniversalModelRouter:
             self.providers["openrouter"] = OpenAICompatibleProvider(
                 api_key=os.getenv("OPENROUTER_API_KEY", ""),
                 base_url="https://openrouter.ai/api/v1",
-                model_name=os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001"),
+                model_name=os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free"),
                 provider_name="openrouter",
             )
         elif target == "groq" and target not in self.providers:
@@ -861,6 +891,7 @@ class UniversalModelRouter:
             target = "local"
 
         return self.providers[target]
+
 
     def set_provider(self, name: str) -> bool:
         valid = {"local", "claude", "ollama", "gemini", "google", "openrouter", "groq", "openai"}
