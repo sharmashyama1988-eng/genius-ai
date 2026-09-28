@@ -1,4 +1,4 @@
-"""Live Web and Knowledge Retrieval Provider."""
+"""Live Web and Knowledge Retrieval Provider with Real-Time Web Scraping."""
 
 from __future__ import annotations
 
@@ -8,11 +8,13 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from urllib.parse import unquote
 import httpx
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "GeniusDeepResearcher/2.0 (Worldwide Production; AI Research Agent)"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 
 @dataclass
@@ -25,11 +27,15 @@ class WebSearchResult:
 
 
 class WebSearchClient:
-    """Async web search and page text extraction client."""
+    """Async real-time web search and page text extraction client."""
 
-    def __init__(self, timeout: float = 10.0) -> None:
+    def __init__(self, timeout: float = 12.0) -> None:
         self.timeout = timeout
-        self.headers = {"User-Agent": USER_AGENT}
+        self.headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.7,hi;q=0.5",
+        }
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -46,23 +52,119 @@ class WebSearchClient:
             await self._client.aclose()
 
     async def search(self, query: str, limit: int = 5) -> List[WebSearchResult]:
-        """Queries DuckDuckGo Instant Answer API and related topics."""
+        """
+        Executes real-time web search using multi-tier fallback:
+        1. DuckDuckGo HTML search (full snippets + fresh rankings)
+        2. DuckDuckGo Lite search
+        3. DuckDuckGo Instant Answer API
+        """
+        clean_q = query.strip()
+        if not clean_q:
+            return []
+
+        # Tier 1: DuckDuckGo HTML POST search
+        results = await self._search_duckduckgo_html(clean_q, limit=limit)
+        if results:
+            return results
+
+        # Tier 2: DuckDuckGo Lite POST search
+        results = await self._search_duckduckgo_lite(clean_q, limit=limit)
+        if results:
+            return results
+
+        # Tier 3: Instant Answer API fallback
+        return await self._search_instant_answer(clean_q, limit=limit)
+
+    async def _search_duckduckgo_html(self, query: str, limit: int = 5) -> List[WebSearchResult]:
+        client = await self._get_client()
+        url = "https://html.duckduckgo.com/html/"
+        data = {"q": query, "b": ""}
+
+        results: List[WebSearchResult] = []
+        try:
+            resp = await client.post(url, data=data)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for r in soup.select(".result"):
+                    if len(results) >= limit:
+                        break
+                    title_elem = r.select_one(".result__title a")
+                    snippet_elem = r.select_one(".result__snippet")
+                    if not title_elem:
+                        continue
+
+                    raw_url = title_elem.get("href", "")
+                    actual_url = raw_url
+                    if "uddg=" in raw_url:
+                        match = re.search(r"uddg=([^&]+)", raw_url)
+                        if match:
+                            actual_url = unquote(match.group(1))
+
+                    title = title_elem.get_text(strip=True)
+                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ""
+
+                    if title and actual_url and not actual_url.startswith("/"):
+                        results.append(
+                            WebSearchResult(
+                                title=title,
+                                url=actual_url,
+                                snippet=html.unescape(snippet),
+                                source="duckduckgo_web",
+                            )
+                        )
+        except Exception as e:
+            logger.debug(f"DuckDuckGo HTML search error for '{query}': {e}")
+
+        return results
+
+    async def _search_duckduckgo_lite(self, query: str, limit: int = 5) -> List[WebSearchResult]:
+        client = await self._get_client()
+        url = "https://lite.duckduckgo.com/lite/"
+        data = {"q": query}
+
+        results: List[WebSearchResult] = []
+        try:
+            resp = await client.post(url, data=data)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                links = soup.select("a.result-link")
+                snippets = soup.select("td.result-snippet")
+
+                for i, link in enumerate(links):
+                    if len(results) >= limit:
+                        break
+                    title = link.get_text(strip=True)
+                    actual_url = link.get("href", "")
+                    if "uddg=" in actual_url:
+                        match = re.search(r"uddg=([^&]+)", actual_url)
+                        if match:
+                            actual_url = unquote(match.group(1))
+
+                    snippet = snippets[i].get_text(strip=True) if i < len(snippets) else ""
+                    if title and actual_url:
+                        results.append(
+                            WebSearchResult(
+                                title=title,
+                                url=actual_url,
+                                snippet=html.unescape(snippet),
+                                source="duckduckgo_lite",
+                            )
+                        )
+        except Exception as e:
+            logger.debug(f"DuckDuckGo Lite search error for '{query}': {e}")
+
+        return results
+
+    async def _search_instant_answer(self, query: str, limit: int = 5) -> List[WebSearchResult]:
         client = await self._get_client()
         url = "https://api.duckduckgo.com/"
-        params = {
-            "q": query,
-            "format": "json",
-            "no_html": "1",
-            "skip_disambig": "0",
-        }
+        params = {"q": query, "format": "json", "no_html": "1", "skip_disambig": "0"}
 
         results: List[WebSearchResult] = []
         try:
             resp = await client.get(url, params=params)
             if resp.status_code == 200:
                 data = resp.json()
-
-                # 1. Main Abstract
                 abstract = data.get("AbstractText", "")
                 abstract_url = data.get("AbstractURL", "")
                 heading = data.get("Heading", query)
@@ -76,12 +178,10 @@ class WebSearchClient:
                         )
                     )
 
-                # 2. Related Topics
                 topics = data.get("RelatedTopics", [])
                 for t in topics:
                     if len(results) >= limit:
                         break
-                    # Sometimes topic is a group with 'Topics'
                     if "Text" in t and "FirstURL" in t:
                         results.append(
                             WebSearchResult(
@@ -91,22 +191,8 @@ class WebSearchClient:
                                 source="duckduckgo_topic",
                             )
                         )
-                    elif "Topics" in t:
-                        for sub_t in t.get("Topics", []):
-                            if len(results) >= limit:
-                                break
-                            if "Text" in sub_t and "FirstURL" in sub_t:
-                                results.append(
-                                    WebSearchResult(
-                                        title=sub_t.get("Text", "")[:60] + "...",
-                                        url=sub_t.get("FirstURL", ""),
-                                        snippet=sub_t.get("Text", ""),
-                                        source="duckduckgo_topic",
-                                    )
-                                )
-
         except Exception as e:
-            logger.warning(f"DuckDuckGo API search error for '{query}': {e}")
+            logger.debug(f"DuckDuckGo Instant Answer error for '{query}': {e}")
 
         return results
 
@@ -119,7 +205,7 @@ class WebSearchClient:
                 return None
 
             raw_html = resp.text
-            # Remove scripts and styles
+            # Remove scripts, styles, navigation, headers, footers
             clean = re.sub(r"<(script|style|nav|header|footer)[^>]*>.*?</\1>", "", raw_html, flags=re.DOTALL | re.IGNORECASE)
             # Remove tags
             clean = re.sub(r"<[^>]+>", " ", clean)

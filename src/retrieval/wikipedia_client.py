@@ -207,6 +207,11 @@ class WikipediaClient:
             ]
 
             self.cache.save_search_results(query, results)
+            if not results:
+                words = query.strip().split()
+                if len(words) > 2:
+                    shorter_query = " ".join(words[:2])
+                    return await self.search(shorter_query, limit=limit)
             return results
         except Exception as e:
             logger.error(f"Failed to search Wikipedia for '{query}': {e}")

@@ -66,6 +66,28 @@ python run_genius.py
 
 ---
 
+## 🖥️ System Requirements & Hardware Compatibility
+
+> **"क्या मेरा कंप्यूटर Genius AI चलाने के लिए capable है?"**  
+> **हाँ, 100%!** चाहे आपके पास 10 साल पुराना 4GB RAM वाला साधारण लैपटॉप हो या हाई-एंड गेमिंग PC, Genius AI हर कंप्यूटर पर सुपर-फास्ट चलने के लिए आर्किटेक्ट किया गया है।
+
+### 📊 Mode-by-Mode Hardware Requirements
+
+| Specification | ⚡ Cloud API / Free Model Mode <br> *(Default & Recommended)* | 💻 Local Edge Mode <br> *(Offline Qwen2.5-0.5B CPU)* | 🚀 Local Large Model Mode <br> *(Ollama Qwen-7B / Llama-3-8B)* |
+|---|---|---|---|
+| **RAM (Memory)** | **2 GB – 4 GB** (अत्यंत हल्का) | **4 GB – 8 GB** | **16 GB+** |
+| **ROM / Storage (Disk)** | **~500 MB** free space | **~2.5 GB** free space | **10 GB – 20 GB** SSD |
+| **Processor (CPU)** | Any Dual-Core Intel / AMD / Apple Silicon | Quad-Core Intel Core i3/i5/i7, AMD Ryzen, Apple M-Series | 6-Core+ Modern High-Speed CPU |
+| **Graphics (GPU / VRAM)**| **NOT REQUIRED (0 MB VRAM)** | **NOT REQUIRED** (Runs smoothly on CPU) | Dedicated NVIDIA GPU (6 GB – 12 GB VRAM) |
+| **Internet Connection** | Required (100% Free OpenRouter / Google AI Studio) | Optional (100% Offline; needed only for live web search) | Optional (100% Offline) |
+| **Supported OS** | Windows 10/11 (64-bit), macOS 11+, Linux (Ubuntu/Debian) | Windows 10/11 (64-bit), macOS 11+, Linux | Windows 10/11 (64-bit), macOS 11+, Linux |
+
+#### 💡 Quick Compatibility Summary:
+- ✅ **Low-End / Old Laptop (4GB RAM, Dual-Core, No GPU)**: बस `start_genius.bat` पर डबल-क्लिक करें $\to$ Free OpenRouter या Google AI Studio key डालें $\to$ **Zero Cost** और बिना किसी RAM लैग के 550B Frontier AI का आनंद लें!
+- ✅ **100% Offline Work**: बिना इंटरनेट के लोकल CPU पर Deep-Thinking चलाने के लिए `/model local` का उपयोग करें।
+
+---
+
 ## 🎯 How Genius AI Thinks (Simplified Flow)
 
 ```mermaid
@@ -110,6 +132,36 @@ python run_genius.py "Latest discoveries by James Webb Space Telescope" --resear
 # Suppress thinking tokens for clean final output
 python run_genius.py "Explain quantum entanglement in simple terms" --no-think
 ```
+
+---
+
+## 🌐 Real-Time Web Search & Deep Research Capabilities
+
+Genius AI में **Dual-Engine Parallel Epistemic Retrieval (Live DuckDuckGo Web Search + Wikipedia)** इंटीग्रेटेड है, जो हर उत्तर को 2026 के ताज़ा और सत्यापित तथ्यों के साथ `[1]`, `[2]` इनलाइन साइटेशन्स के साथ प्रस्तुत करता है।
+
+### 🎯 5 Core Research Domains & Live Capabilities:
+
+#### 1. 💼 Job Search & Career Research
+- **Live Vacancy Discovery**: किसी भी कंपनी, रोल (e.g. *React Developer, AI Engineer, Product Manager*) या लोकेशन (*Remote, Delhi, Bengaluru*) के लिए सक्रिय जॉब वेकेंसीज़ खोजना।
+- **Salary & Market Trends**: 2026 के नवीनतम मार्केट ट्रेंड्स, सैलरी पैकेजेस, और इन-डिमांड स्किल्स की वास्तविक जानकारी।
+- **Company Due Diligence**: इंटरव्यू से ठीक पहले किसी कंपनी के हालिया प्रोजेक्ट्स, कॉर्पोरेट कल्चर, और ताज़ा अपडेट्स निकालना।
+
+#### 2. 📊 Deep Research & Market Intelligence
+- **Breaking News & Current Affairs**: ताज़ा समाचार, लाइव स्पोर्ट्स स्कोर्स, इलेक्शन नतीजे, और शेयर मार्केट के उतार-चढ़ाव।
+- **Competitor Intelligence**: प्रतिस्पर्धी कंपनियों की नई रणनीतियाँ, प्रोडक्ट लॉन्चेस, और मार्केट कैपिटलाइज़ेशन / नेटवर्थ का सटीक विश्लेषण।
+- **Academic & Scientific Research**: नए पब्लिश हुए रिसर्च पेपर्स, वैज्ञानिक खोजें, और ताज़ा पब्लिक डेटासेट्स ढूंढना।
+
+#### 3. 💻 Coding & Tech Assistance
+- **Latest API Documentation**: आउटडेटेड या डेप्रिकेटेड कोड से बचने के लिए किसी भी फ्रेमवर्क (*Next.js, FastAPI, PyTorch, LangChain*) का 2026 का ताज़ा डॉक्यूमेंटेशन।
+- **Real-Time Error Fixing**: नए उभरे सॉफ्टवेयर बग्स, गिटहब इश्यूज, और कम्युनिटी वर्कअराउंड्स का तुरंत हल खोजना।
+
+#### 4. 🛍️ Shopping & Product Intelligence
+- **New Gadget Specifications**: हाल ही में लॉन्च हुए स्मार्टफोन्स, लैपटॉप्स, या प्रोसेसर्स के विस्तृत स्पेसिफिकेशन्स और उपलब्धता।
+- **Multi-Source Reviews & Comparison**: अलग-अलग वेबसाइट्स से यूज़र रिव्यूज को समराइज़ करना और दो प्रोडक्ट्स के बीच फीचर-बाय-फीचर तुलना करना।
+
+#### 5. ✈️ Travel & Event Planning
+- **Live Local Events**: आने वाले वीकेंड पर आपके शहर में होने वाले लाइव कॉन्सर्ट्स, फेस्टिवल्स, या पब्लिक इवेंट्स की लिस्ट।
+- **Accommodations & Tourism**: किसी भी डेस्टिनेशन के टॉप-रेटेड रेस्टोरेंट्स, होटल्स, और फ्लाइट्स के मौजूदा प्राइस ट्रेंड्स।
 
 ---
 

@@ -143,19 +143,37 @@ class XThinkingEngine:
         return False
 
     def _extract_search_keywords(self, query: str) -> str:
-        """Removes conversational noise to formulate targeted search terms."""
+        """Removes conversational noise and research carrier phrases to formulate targeted search terms."""
+        cleaned = query.strip()
+        carrier_patterns = [
+            r"(?i)\b(internet\s+se\s+research\s+karke|web\s+se\s+research\s+karke|research\s+karke|search\s+karke|google\s+karke|net\s+se\s+dhoondh\s+ke|internet\s+pe\s+search\s+karke)\b",
+            r"(?i)\b(please\s+search\s+(?:the\s+web\s+for|google\s+for|online\s+for)?|search\s+online\s+for|search\s+the\s+web\s+for|do\s+research\s+on)\b",
+            r"(?i)\b(ye\s+batao\s+ki|mujhe\s+ye\s+batao\s+ki|mujhe\s+batao\s+ki|batao\s+ki|bataiye\s+ki|bata\s+do\s+ki)\b",
+            r"(?i)\b(please\s+tell\s+me|tell\s+me\s+about|can\s+you\s+tell\s+me|what\s+is\s+the|who\s+is\s+the)\b",
+            r"(?i)\b(kitni\s+hai|kitna\s+hai|kya\s+hai|kaun\s+hai|kab\s+hai|kahan\s+hai|kaha\s+hai)\b",
+            r"(?i)\b(batao|bataiye|bata\s+do|dhoondho|khojo|nikalo)\b",
+        ]
+        for pat in carrier_patterns:
+            cleaned = re.sub(pat, " ", cleaned)
+
         noise_words = {
             "what", "is", "the", "tell", "me", "about", "who", "when", "why",
             "how", "does", "explain", "describe", "can", "you", "please",
             "give", "details", "on", "a", "an", "and", "or", "in", "of",
             "kya", "hai", "batao", "bataiye", "mujhe", "ke", "ki", "ka",
-            "who", "was", "are", "which",
+            "who", "was", "are", "which", "se", "ko", "par", "pe", "mein",
+            "me", "aur", "bhi", "toh", "to", "ye", "yeh", "woh", "wo",
+            "karke", "karo", "karein", "kar", "apne", "apna", "apni",
         }
-        words = re.findall(r"\b[a-zA-Z0-9_-]+\b", query)
+        words = re.findall(r"\b[a-zA-Z0-9_-]+\b", cleaned)
         filtered = [w for w in words if w.lower() not in noise_words]
         if not filtered or len(filtered) < 2:
-            return query.strip()
+            words_orig = re.findall(r"\b[a-zA-Z0-9_-]+\b", query)
+            filtered = [w for w in words_orig if w.lower() not in noise_words]
+            if not filtered:
+                return query.strip()
         return " ".join(filtered[:8])
+
 
     @staticmethod
     def _is_conversational(query: str) -> bool:
@@ -309,9 +327,17 @@ class XThinkingEngine:
         # Node 2: Router_Decision
         active_mode = (research_mode or self.research_mode).lower()
         should_retrieve = False
+
+        research_triggers = {
+            "internet", "research", "search", "google", "web", "online", "latest",
+            "current", "aaj", "taja", "networth", "net worth", "price", "news",
+            "ceo", "market cap", "shares", "company", "who is", "what is",
+        }
+        explicit_research_requested = any(rt in question.lower() for rt in research_triggers)
+
         if active_mode in ("off", "disabled", "direct", "offline"):
             should_retrieve = False
-        elif active_mode in ("on", "always", "enabled"):
+        elif active_mode in ("on", "always", "enabled") or explicit_research_requested:
             should_retrieve = True
         else:  # auto
             if category == "conversational" or self._is_conversational(question):
@@ -380,24 +406,30 @@ class XThinkingEngine:
                     )
 
             # BM25 Passage Chunking & Relevance Ranking
-            all_chunks: List[PassageChunk] = []
+            wiki_chunks: List[PassageChunk] = []
             for a in articles:
                 chunks = self.ranker.chunk_article(a.title, a.url, a.full_text, a.sections)
-                all_chunks.extend(chunks)
+                wiki_chunks.extend(chunks)
 
+            web_chunks: List[PassageChunk] = []
             for idx, w in enumerate(web_items):
-                if w.snippet and len(w.snippet) > 30:
-                    all_chunks.append(
+                if w.snippet and len(w.snippet) > 20:
+                    web_chunks.append(
                         PassageChunk(
                             article_title=w.title,
                             article_url=w.url,
-                            section_title="Web Search",
+                            section_title="Live Web Search",
                             text=w.snippet,
                             chunk_index=1000 + idx,
                         )
                     )
 
-            ranked_passages = self.ranker.rank_passages(question, all_chunks, top_k=top_k_passages)
+            # Prioritize fresh real-time web results alongside top Wikipedia passages
+            ranked_wiki = self.ranker.rank_passages(search_query, wiki_chunks, top_k=3) if wiki_chunks else []
+            ranked_passages = web_chunks[:3] + ranked_wiki[:3]
+            if not ranked_passages and (wiki_chunks or web_chunks):
+                ranked_passages = (web_chunks + wiki_chunks)[:top_k_passages]
+
 
             # Node 3: Contradiction_Matrix
             contradiction_density = self.grounding_engine.compute_contradiction_density(evidence_pool)
@@ -476,7 +508,8 @@ class XThinkingEngine:
         )
 
         t_thinking_start = time.time()
-        in_thinking = True
+        in_thinking = False
+        mode_decided = False
         thinking_tokens_list: List[str] = []
         response_tokens_list: List[str] = []
         full_tokens: List[str] = []
@@ -489,6 +522,24 @@ class XThinkingEngine:
             ):
                 full_tokens.append(token)
                 text_so_far = "".join(full_tokens)
+
+                if not mode_decided:
+                    if "<think>" in text_so_far:
+                        in_thinking = True
+                        mode_decided = True
+                    elif len(text_so_far.strip()) >= 15:
+                        # Model did not emit <think> tag; direct response mode
+                        in_thinking = False
+                        mode_decided = True
+                        yield ReasoningEvent(
+                            stage="response",
+                            event_type="status",
+                            payload={"message": "Synthesizing grounded response..."},
+                        )
+                        for prev_tok in full_tokens:
+                            response_tokens_list.append(prev_tok)
+                            yield ReasoningEvent(stage="response", event_type="token", payload={"token": prev_tok})
+                        continue
 
                 if "</think>" in text_so_far and in_thinking:
                     in_thinking = False
@@ -515,8 +566,9 @@ class XThinkingEngine:
                         thinking_tokens_list.append(clean_t)
                         yield ReasoningEvent(stage="thinking", event_type="token", payload={"token": clean_t})
                 else:
-                    response_tokens_list.append(token)
-                    yield ReasoningEvent(stage="response", event_type="token", payload={"token": token})
+                    if mode_decided:
+                        response_tokens_list.append(token)
+                        yield ReasoningEvent(stage="response", event_type="token", payload={"token": token})
 
         except Exception as e:
             logger.exception("Inference failed")
@@ -531,7 +583,12 @@ class XThinkingEngine:
                 event_type="complete",
                 payload={"thoughts": "".join(thinking_tokens_list).strip()},
             )
-            response_tokens_list = thinking_tokens_list
+            if not response_tokens_list:
+                response_tokens_list = thinking_tokens_list
+        elif not mode_decided and full_tokens:
+            for tok in full_tokens:
+                response_tokens_list.append(tok)
+                yield ReasoningEvent(stage="response", event_type="token", payload={"token": tok})
 
         raw_thoughts = "".join(thinking_tokens_list).replace("<think>", "").strip()
         candidate_response = "".join(response_tokens_list).strip()

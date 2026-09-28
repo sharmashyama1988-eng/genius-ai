@@ -94,6 +94,7 @@ class MultilingualManager:
             f"   {profile.thinking_instruction}\n"
             f"2. After `</think>`, deliver your final answer as Genius in {profile.name}.\n"
             f"3. Ensure facts are cited with inline tags [1], [2] matching the source facts above.\n"
-            f"4. Speaking style: Fluent, natural, highly intelligent, perfectly adapted to {profile.name}."
+            f"4. Speaking style: Fluent, natural, highly intelligent, perfectly adapted to {profile.name}.\n"
+            f"5. REAL-TIME LIVE KNOWLEDGE: You are equipped with a real-time web search engine. The live facts and market data extracted above are real and fresh. NEVER state 'I cannot browse the internet' or complain about cutoff dates. Always answer directly, authoritatively, and accurately using the live facts provided."
         )
         return prompt
