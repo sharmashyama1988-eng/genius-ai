@@ -60,6 +60,7 @@ class GeniusChatSession:
         self.show_thinking = show_thinking
         self.chat_view_mode: str = "cards"
         self.engine = XThinkingEngine()
+        self.engine.set_model_provider(self.engine.router.active_provider_name)
         self.workspace = WorkspaceManager()
         self.executor = SystemExecutor(default_cwd=str(self.workspace.get_workspace()))
         self.session_id = self.engine.session_mgr.create_session("Interactive Session")
@@ -1118,6 +1119,12 @@ class GeniusChatSession:
                         "contradiction_density": event.payload.get("contradiction_density", 0.0),
                     }
 
+                elif event.stage == "error":
+                    err_msg = event.payload.get("error", "Unknown inference error")
+                    active_prov = self.engine.router.active_provider_name.upper()
+                    self.console.print(f"\n[bold red]❌ Inference / API Error ({active_prov}):[/bold red] {err_msg}")
+                    response_text = f"API Error ({active_prov}): {err_msg}"
+
         # Render response based on chat view mode
         lang_label = detected_info.get("name", "Multilingual") if detected_info else "Grounded"
         active_provider = self.engine.router.active_provider_name.upper()
@@ -1194,8 +1201,8 @@ def main():
 
     session = GeniusChatSession(show_thinking=not args.no_think)
     session.engine.set_research_mode(args.research)
-    if args.model:
-        session.engine.set_model_provider(args.model)
+    active_m = args.model or session.engine.router.active_provider_name
+    session.engine.set_model_provider(active_m)
 
     if args.query:
         session.print_welcome()

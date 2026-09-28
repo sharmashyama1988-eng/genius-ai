@@ -109,7 +109,7 @@ class XThinkingEngine:
         research_mode: str = "auto",
     ) -> None:
         self.router = UniversalModelRouter()
-        self.model = model_engine or self.router.get_provider("local")
+        self.model = model_engine or self.router.get_provider(self.router.active_provider_name)
         self.wiki = wiki_client or WikipediaClient()
         self.web = web_client or WebSearchClient()
         self.dataset_mgr = dataset_manager or DatasetManager()
