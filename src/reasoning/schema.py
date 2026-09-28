@@ -12,7 +12,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Literal, Optional, Self
+from typing import Annotated, Any, Dict, List, Literal, Optional
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from pydantic import (
     BaseModel,
