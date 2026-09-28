@@ -4,6 +4,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10+-brightgreen.svg)](https://www.python.org/)
+[![Spec: CSG v2.0](https://img.shields.io/badge/Architecture-CSG%20v2.0%20Spec-blue.svg)](SPECIFICATION.md)
 [![Model: Edge + Cloud](https://img.shields.io/badge/Engine-Qwen2.5--0.5B%20%7C%20Claude%20%7C%20Ollama-orange.svg)](src/model/provider.py)
 [![Grounding: Zero Hallucination](https://img.shields.io/badge/Grounding-Live%20Wikipedia%20%2B%20Web-purple.svg)](src/retrieval/)
 [![Multilingual: 100+ & Hinglish](https://img.shields.io/badge/Languages-Hinglish%20%7C%20Hindi%20%7C%20English-cyan.svg)](src/languages/)
@@ -107,6 +108,8 @@ flowchart LR
 2. **Retrieve**: If recent or encyclopedic facts are needed, it pulls live data from Wikipedia and the web in parallel.
 3. **Reason**: Inside `<think>...</think>`, Genius forms hypotheses, cross-examines solutions, and catches mistakes before speaking.
 4. **Verify & Deliver**: It mathematically verifies that its response is backed by evidence and outputs a clean, cited answer.
+
+> 📐 **Complete Architecture Specification**: For complete node-by-node mathematical formulas, Contradiction Density ($D$), Grounding Score ($G$), and CSG v2.0 state schemas, read the [xThinking Engine Technical Specification (SPECIFICATION.md)](SPECIFICATION.md).
 
 ---
 
